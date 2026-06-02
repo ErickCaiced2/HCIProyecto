@@ -788,6 +788,76 @@
         }
 
         /* ========================================
+           LENGUA DE SEÑAS — MODAL Y PALABRAS TAPPABLES
+           ======================================== */
+        .sign-word {
+            display: inline-block;
+            cursor: pointer;
+            border-radius: 4px;
+            padding: 1px 2px;
+            transition: background 150ms ease;
+        }
+        .sign-word:hover, .sign-word:active {
+            background: rgba(167,139,250,0.25);
+            color: #a78bfa;
+        }
+
+        #signs-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 500;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            pointer-events: none;
+        }
+        #signs-modal.open { pointer-events: all; }
+
+        #signs-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0);
+            transition: background 250ms ease;
+        }
+        #signs-modal.open #signs-backdrop { background: rgba(0,0,0,0.6); }
+
+        #signs-sheet {
+            position: relative;
+            background: var(--bg-surface);
+            border-radius: 20px 20px 0 0;
+            padding: 0 0 24px;
+            transform: translateY(100%);
+            transition: transform 300ms cubic-bezier(0.34,1.2,0.64,1);
+            max-height: 70vh;
+            display: flex;
+            flex-direction: column;
+        }
+        #signs-modal.open #signs-sheet { transform: translateY(0); }
+
+        .signs-handle { width: 36px; height: 4px; background: var(--border-card); border-radius: 2px; margin: 12px auto 0; flex-shrink: 0; }
+        .signs-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px 8px; flex-shrink: 0; }
+        .signs-word { font-size: 22px; font-weight: 700; color: var(--text-primary); }
+        .signs-lang { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .signs-close { background: var(--bg-card); border: none; color: var(--text-secondary); width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+
+        #signs-iframe-wrap { flex: 1; position: relative; min-height: 280px; }
+        #signs-iframe { width: 100%; height: 100%; border: none; background: var(--bg-card); }
+
+        #signs-fallback {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 32px 24px;
+            flex: 1;
+        }
+        #signs-fallback.visible { display: flex; }
+        .signs-fallback-icon { font-size: 48px; }
+        .signs-fallback-text { font-size: 14px; color: var(--text-secondary); text-align: center; }
+        .btn-signs-open { background: #a78bfa; border: none; color: #fff; padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; }
+
+        /* ========================================
            FLASHCARDS - ASOCIAR IMAGEN PALABRA
            ======================================== */
         #flashcard-screen { flex-direction: column; padding-bottom: 0; }
@@ -963,6 +1033,29 @@
 
     <!-- Notificación de alerta flotante -->
     <div class="notification-alert" id="alertNotification" role="alert"></div>
+
+    <!-- Modal lengua de señas -->
+    <div id="signs-modal" role="dialog" aria-modal="true">
+        <div id="signs-backdrop"></div>
+        <div id="signs-sheet">
+            <div class="signs-handle"></div>
+            <div class="signs-header">
+                <div>
+                    <div class="signs-word" id="signsWord"></div>
+                    <div class="signs-lang">Lengua de Señas · SpreadTheSign</div>
+                </div>
+                <button class="signs-close" id="signsClose" aria-label="Cerrar">✕</button>
+            </div>
+            <div id="signs-iframe-wrap">
+                <iframe id="signs-iframe" title="Seña" allowfullscreen></iframe>
+            </div>
+            <div id="signs-fallback">
+                <div class="signs-fallback-icon">🤟</div>
+                <div class="signs-fallback-text">No se pudo cargar el video aquí.<br>Ábrelo en el navegador.</div>
+                <button class="btn-signs-open" id="signsOpenBtn">Ver seña en SpreadTheSign</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         // === TRANSCRIPCIÓN EN TIEMPO REAL CON WEB SPEECH API ===
@@ -1229,8 +1322,9 @@
                 bubble.classList.remove('interim');
                 bubble.classList.add('final');
 
-                // Mostrar solo el texto sin cursor
-                bubble.textContent = finalText;
+                // Mostrar texto con palabras tappables para señas
+                bubble.innerHTML = '';
+                wrapWordsWithSign(bubble, finalText);
 
                 // Añadir timestamp
                 const timestamp = document.createElement('div');
@@ -1264,7 +1358,7 @@
         function addFinalBubble(text) {
             const bubble = document.createElement('div');
             bubble.className = 'message-bubble normal final';
-            bubble.textContent = text;
+            wrapWordsWithSign(bubble, text);
 
             const timestamp = document.createElement('div');
             timestamp.className = 'bubble-timestamp';
@@ -1764,7 +1858,72 @@
         }
 
         // ========================================
-        // BLOQUE 22: EVENT LISTENERS
+        // BLOQUE 22: LENGUA DE SEÑAS
+        // ========================================
+        const signsModal   = document.getElementById('signs-modal');
+        const signsBackdrop= document.getElementById('signs-backdrop');
+        const signsSheet   = document.getElementById('signs-sheet');
+        const signsWordEl  = document.getElementById('signsWord');
+        const signsIframe  = document.getElementById('signs-iframe');
+        const signsFallback= document.getElementById('signs-fallback');
+        const signsOpenBtn = document.getElementById('signsOpenBtn');
+        const signsClose   = document.getElementById('signsClose');
+
+        function buildSignUrl(word) {
+            const clean = encodeURIComponent(word.toLowerCase().replace(/[.,!?;:]/g, ''));
+            return `https://www.spreadthesign.com/es.co/search/?query=${clean}`;
+        }
+
+        function openSignsModal(word) {
+            const url = buildSignUrl(word);
+            signsWordEl.textContent = word;
+            signsIframe.src = '';
+            signsFallback.classList.remove('visible');
+            signsIframe.parentElement.style.display = 'block';
+
+            // Timeout: si el iframe no cargó en 5s, mostrar fallback
+            const timer = setTimeout(() => {
+                signsIframe.parentElement.style.display = 'none';
+                signsFallback.classList.add('visible');
+            }, 5000);
+
+            signsIframe.onload = () => clearTimeout(timer);
+            signsIframe.onerror = () => {
+                clearTimeout(timer);
+                signsIframe.parentElement.style.display = 'none';
+                signsFallback.classList.add('visible');
+            };
+
+            signsOpenBtn.onclick = () => window.open(url, '_blank');
+            signsIframe.src = url;
+            signsModal.classList.add('open');
+        }
+
+        function closeSignsModal() {
+            signsModal.classList.remove('open');
+            setTimeout(() => { signsIframe.src = ''; }, 300);
+        }
+
+        signsClose.addEventListener('click', closeSignsModal);
+        signsBackdrop.addEventListener('click', closeSignsModal);
+
+        function wrapWordsWithSign(container, text) {
+            const words = text.split(/(\s+)/);
+            words.forEach(part => {
+                if (/^\s+$/.test(part)) {
+                    container.appendChild(document.createTextNode(part));
+                } else {
+                    const span = document.createElement('span');
+                    span.className = 'sign-word';
+                    span.textContent = part;
+                    span.addEventListener('click', () => openSignsModal(part.replace(/[.,!?;:]/g, '')));
+                    container.appendChild(span);
+                }
+            });
+        }
+
+        // ========================================
+        // BLOQUE 23: EVENT LISTENERS
         // ========================================
         DOM.tabSocial.addEventListener('click', () => switchScreen('social'));
         DOM.tabRadar.addEventListener('click', () => switchScreen('radar'));
