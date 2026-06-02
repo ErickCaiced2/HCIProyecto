@@ -1,8 +1,19 @@
 {
-  "buildCommand": "",
-  "devCommand": "python -m http.server 3000",
-  "installCommand": "",
-  "framework": "static",
-  "public": "."
+  "version": 2,
+  "buildCommand": "echo 'Static HTML project'",
+  "outputDirectory": ".",
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/(.*).html",
+      "destination": "/$1.html"
+    }
+  ]
 }
+
 
