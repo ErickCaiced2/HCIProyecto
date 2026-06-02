@@ -248,6 +248,10 @@
             color: #f59e0b;
         }
 
+        .nav-tab.aprende.active {
+            color: #a78bfa;
+        }
+
         .nav-icon {
             font-size: 20px;
         }
@@ -782,6 +786,37 @@
             outline: 2px solid var(--accent-green);
             outline-offset: 2px;
         }
+
+        /* ========================================
+           FLASHCARDS - ASOCIAR IMAGEN PALABRA
+           ======================================== */
+        #flashcard-screen { flex-direction: column; padding-bottom: 0; }
+        .flashcard-header { padding: 16px 16px 0; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+        .flashcard-progress-bar { height: 4px; background: var(--bg-card); border-radius: 2px; overflow: hidden; }
+        .flashcard-progress-fill { height: 100%; background: #a78bfa; border-radius: 2px; transition: width 400ms ease; width: 10%; }
+        .flashcard-counter { font-size: 12px; color: var(--text-muted); text-align: right; }
+        .flashcard-emoji { font-size: 110px; text-align: center; margin: 28px 0 20px; line-height: 1; flex-shrink: 0; }
+        .flashcard-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px 24px; }
+        .flashcard-btn {
+            background: var(--bg-card);
+            border: 2px solid var(--border-card);
+            color: var(--text-primary);
+            border-radius: 12px;
+            padding: 18px 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 180ms ease;
+        }
+        .flashcard-btn:hover:not(:disabled) { border-color: #a78bfa; color: #a78bfa; }
+        .flashcard-btn.correct { background: rgba(200,241,53,0.15); border-color: var(--accent-green); color: var(--accent-green); }
+        .flashcard-btn.wrong   { background: rgba(232,64,64,0.15);  border-color: var(--accent-red);   color: var(--accent-red); }
+        .flashcard-btn:disabled { cursor: default; }
+        #flashGameView { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+        #flashResultView { display: none; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 16px; padding: 24px; }
+        #flashResultView.visible { display: flex; }
+        .flashcard-result-score { font-size: 72px; line-height: 1; }
+        .flashcard-result-msg { font-size: 18px; font-weight: 700; color: var(--text-primary); text-align: center; line-height: 1.4; }
     </style>
 </head>
 <body>
@@ -879,6 +914,27 @@
                         </div>
                     </div>
                 </section>
+
+                <!-- Aprende: Asociar imagen-palabra -->
+                <section id="flashcard-screen" class="screen">
+                    <div class="flashcard-header">
+                        <div class="flashcard-progress-bar">
+                            <div class="flashcard-progress-fill" id="flashProgressFill"></div>
+                        </div>
+                        <div class="flashcard-counter" id="flashCounter">1 / 10</div>
+                    </div>
+
+                    <div id="flashGameView">
+                        <div class="flashcard-emoji" id="flashEmoji">🍎</div>
+                        <div class="flashcard-options" id="flashOptions"></div>
+                    </div>
+
+                    <div id="flashResultView">
+                        <div class="flashcard-result-score" id="flashScore"></div>
+                        <div class="flashcard-result-msg" id="flashMsg"></div>
+                        <button class="btn-mic-control" id="flashRestart">Jugar de nuevo</button>
+                    </div>
+                </section>
             </div>
 
             <!-- ========================================
@@ -897,6 +953,10 @@
                     <span class="nav-icon">🎭</span>
                     <span>Simulado</span>
                 </button>
+                <button class="nav-tab aprende" id="tabAprende">
+                    <span class="nav-icon">🎴</span>
+                    <span>Aprende</span>
+                </button>
             </nav>
         </div>
     </div>
@@ -905,7 +965,7 @@
     <div class="notification-alert" id="alertNotification" role="alert"></div>
 
     <script>
-        // === TRANSCRIPCIÓN OFFLINE CON WHISPER (Transformers.js) ===
+        // === TRANSCRIPCIÓN EN TIEMPO REAL CON WEB SPEECH API ===
 
         // ========================================
         // BLOQUE 1: VARIABLES GLOBALES Y ESTADO
@@ -921,15 +981,14 @@
             lastHighAlertTime: 0,
             paused: false,
 
-            // Whisper / Transformers.js
-            whisperPipeline: null,
-            mediaRecorder: null,
-            whisperReady: false,
-            decodeCtx: null,
+            // Web Speech API
+            recognition: null,
             isListening: false,
             totalWords: 0,
             lastTimeSeparatorTime: 0,
-            useSimulatedMode: false
+            useSimulatedMode: false,
+            networkErrorCount: 0,
+            maxNetworkErrors: 3
         };
 
         // Palabras clave para detección contextual
@@ -968,7 +1027,20 @@
             // Header
             headerSubtitle: document.getElementById('headerSubtitle'),
             btnCopyTranscript: document.getElementById('btnCopyTranscript'),
-            tabSimulado: document.getElementById('tabSimulado')
+            tabSimulado: document.getElementById('tabSimulado'),
+
+            // Flashcards
+            tabAprende: document.getElementById('tabAprende'),
+            flashcardScreen: document.getElementById('flashcard-screen'),
+            flashProgressFill: document.getElementById('flashProgressFill'),
+            flashCounter: document.getElementById('flashCounter'),
+            flashEmoji: document.getElementById('flashEmoji'),
+            flashOptions: document.getElementById('flashOptions'),
+            flashGameView: document.getElementById('flashGameView'),
+            flashResultView: document.getElementById('flashResultView'),
+            flashScore: document.getElementById('flashScore'),
+            flashMsg: document.getElementById('flashMsg'),
+            flashRestart: document.getElementById('flashRestart')
         };
 
         // ========================================
@@ -1056,111 +1128,71 @@
                 updateStatusBar('Micrófono bloqueado — revisa permisos del navegador', 'error');
             }
 
-            // Inicializar Whisper (independiente del permiso del micrófono)
-            initWhisperTranscription();
+            // Inicializar Web Speech API
+            initSpeechRecognition();
         }
 
         // ========================================
-        // BLOQUE 5: TRANSCRIPCIÓN OFFLINE CON WHISPER (Transformers.js)
+        // BLOQUE 5: TRANSCRIPCIÓN EN TIEMPO REAL (Web Speech API)
         // ========================================
-        async function initWhisperTranscription() {
-            updateStatusBar('Cargando modelo de IA (~40 MB)...', 'warning');
-            try {
-                const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
-                env.allowLocalModels = false;
-                env.useBrowserCache = true;
+        function initSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-                state.whisperPipeline = await pipeline(
-                    'automatic-speech-recognition',
-                    'Xenova/whisper-tiny',
-                    {
-                        progress_callback: (progress) => {
-                            if (progress.status === 'downloading' && progress.total > 0) {
-                                const pct = Math.round(progress.loaded / progress.total * 100);
-                                updateStatusBar(`Descargando modelo... ${pct}%`, 'warning');
-                            } else if (progress.status === 'ready') {
-                                updateStatusBar('Modelo listo', 'listening');
-                            }
-                        }
-                    }
-                );
-
-                // AudioContext dedicado solo para decodificar audio (no comparte con el radar)
-                state.decodeCtx = new AudioContext();
-
-                state.whisperReady = true;
-                state.isListening = true;
-                updateStatusBar('Activa', 'listening');
-                startChunkRecording();
-            } catch (err) {
-                console.error('Error cargando modelo Whisper:', err);
-                updateStatusBar('Modelo no disponible — usando simulación', 'warning');
+            if (!SpeechRecognition) {
+                updateStatusBar('Navegador sin soporte de voz — usando simulación', 'warning');
                 setTimeout(() => startSimulatedMode(), 500);
+                return;
             }
-        }
 
-        function startChunkRecording() {
-            if (state.paused || !state.whisperReady || !state.mediaStream) return;
+            state.recognition = new SpeechRecognition();
+            state.recognition.language = 'es';
+            state.recognition.continuous = true;
+            state.recognition.interimResults = true;
+            state.recognition.maxAlternatives = 1;
 
-            const chunks = [];
-            const recorder = new MediaRecorder(state.mediaStream);
-            state.mediaRecorder = recorder;
-
-            recorder.ondataavailable = (e) => {
-                if (e.data.size > 0) chunks.push(e.data);
+            state.recognition.onstart = () => {
+                state.networkErrorCount = 0;
+                updateStatusBar('Activa', 'listening');
             };
 
-            recorder.onstop = () => {
-                const blob = new Blob(chunks, { type: recorder.mimeType });
-                transcribeChunk(blob).finally(() => {
-                    if (state.isListening && !state.paused) {
-                        startChunkRecording();
+            state.recognition.onresult = (event) => {
+                state.networkErrorCount = 0;
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript.trim();
+                    if (!event.results[i].isFinal) {
+                        updateLiveBubble(transcript);
+                    } else {
+                        commitBubble(transcript);
                     }
-                });
+                }
             };
 
-            recorder.start();
-            setTimeout(() => {
-                if (recorder.state === 'recording') recorder.stop();
-            }, 5000);
-        }
-
-        async function transcribeChunk(blob) {
-            updateLiveBubble('...');
-            updateStatusBar('Transcribiendo...', 'interim');
-            try {
-                const arrayBuffer = await blob.arrayBuffer();
-                // Usar contexto dedicado para decodificar (no toca el AudioContext del radar)
-                const decoded = await state.decodeCtx.decodeAudioData(arrayBuffer);
-
-                const offlineCtx = new OfflineAudioContext(1, Math.ceil(decoded.duration * 16000), 16000);
-                const source = offlineCtx.createBufferSource();
-                source.buffer = decoded;
-                source.connect(offlineCtx.destination);
-                source.start(0);
-                const resampled = await offlineCtx.startRendering();
-                const float32 = resampled.getChannelData(0);
-
-                const result = await state.whisperPipeline(float32, { language: 'spanish', task: 'transcribe' });
-                const text = result.text?.trim();
-
-                const isNoise = !text || text.length < 3
-                    || /^\[.+\]$/.test(text)           // anotaciones puras: [Música], [Ruido], [Music]…
-                    || text.includes('[BLANK')
-                    || text.toLowerCase().includes('subtítulo')
-                    || text.toLowerCase().includes('amara.org');
-
-                if (isNoise) {
-                    clearLiveBubble();
-                } else {
-                    commitBubble(text);
+            state.recognition.onerror = (event) => {
+                if (event.error === 'no-speech') return;
+                if (event.error === 'network') {
+                    state.networkErrorCount++;
+                    if (state.networkErrorCount >= state.maxNetworkErrors) {
+                        state.isListening = false;
+                        updateStatusBar('Sin conexión — usando simulación', 'warning');
+                        setTimeout(() => startSimulatedMode(), 500);
+                    } else {
+                        updateStatusBar(`Sin señal, reintentando...`, 'warning');
+                    }
+                } else if (event.error === 'not-allowed' || event.error === 'audio-capture') {
+                    updateStatusBar('Micrófono no disponible', 'error');
                 }
-                updateStatusBar('Activa', 'listening');
-            } catch (err) {
-                console.error('Error transcribiendo chunk:', err);
-                clearLiveBubble();
-                updateStatusBar('Activa', 'listening');
-            }
+            };
+
+            state.recognition.onend = () => {
+                if (state.isListening && !state.paused && state.networkErrorCount < state.maxNetworkErrors) {
+                    setTimeout(() => {
+                        try { state.recognition.start(); } catch(e) {}
+                    }, 150);
+                }
+            };
+
+            state.isListening = true;
+            try { state.recognition.start(); } catch(e) {}
         }
 
         function clearLiveBubble() {
@@ -1483,10 +1515,8 @@
 
             if (state.paused) {
                 state.audioContext?.suspend();
-                if (state.mediaRecorder?.state === 'recording') {
-                    state.mediaRecorder.stop();
-                }
                 state.isListening = false;
+                if (state.recognition) state.recognition.stop();
                 DOM.btnMicToggle.textContent = 'Reanudar';
                 updateStatusBar('En pausa · Micrófono detenido', 'paused');
             } else {
@@ -1494,8 +1524,8 @@
                 state.isListening = true;
                 DOM.btnMicToggle.textContent = 'Pausar';
                 updateStatusBar('Activa', 'listening');
-                if (state.whisperReady) {
-                    startChunkRecording();
+                if (state.recognition) {
+                    try { state.recognition.start(); } catch(e) {}
                 }
             }
         }
@@ -1592,20 +1622,130 @@
         function switchScreen(screenId) {
             state.currentScreen = screenId;
 
-            // Actualizar tabs
             DOM.tabSocial.classList.toggle('active', screenId === 'social');
             DOM.tabRadar.classList.toggle('active', screenId === 'radar');
-
-            // Actualizar clases radar
             DOM.tabRadar.classList.toggle('radar', screenId === 'radar');
+            DOM.tabAprende.classList.toggle('active', screenId === 'flashcard');
+            DOM.tabAprende.classList.toggle('aprende', true);
 
-            // Actualizar visibilidad de pantallas
             DOM.socialScreen.classList.toggle('active', screenId === 'social');
             DOM.radarScreen.classList.toggle('active', screenId === 'radar');
+            DOM.flashcardScreen.classList.toggle('active', screenId === 'flashcard');
         }
 
         // ========================================
-        // BLOQUE 21: MODO SIMULADO TOGGLE
+        // BLOQUE 21: FLASHCARDS — ASOCIAR IMAGEN-PALABRA
+        // ========================================
+        const VOCABULARY = [
+            { emoji:'🍎', word:'manzana' }, { emoji:'🍕', word:'pizza' },
+            { emoji:'🍺', word:'cerveza' }, { emoji:'🍔', word:'hamburguesa' },
+            { emoji:'🍌', word:'plátano' }, { emoji:'🍓', word:'fresa' },
+            { emoji:'🐶', word:'perro' },   { emoji:'🐱', word:'gato' },
+            { emoji:'🐦', word:'pájaro' },  { emoji:'🐠', word:'pez' },
+            { emoji:'🐍', word:'serpiente'},{ emoji:'🐘', word:'elefante' },
+            { emoji:'🚗', word:'auto' },    { emoji:'🚌', word:'bus' },
+            { emoji:'🚲', word:'bicicleta'},{ emoji:'✈️', word:'avión' },
+            { emoji:'🚢', word:'barco' },   { emoji:'🚂', word:'tren' },
+            { emoji:'🌳', word:'árbol' },   { emoji:'🌺', word:'flor' },
+            { emoji:'☀️', word:'sol' },     { emoji:'🌙', word:'luna' },
+            { emoji:'🌊', word:'ola' },     { emoji:'🌋', word:'volcán' },
+            { emoji:'📱', word:'teléfono' },{ emoji:'💻', word:'computadora' },
+            { emoji:'📷', word:'cámara' },  { emoji:'🎮', word:'videojuego' },
+            { emoji:'🎧', word:'audífonos'},{ emoji:'🛋️', word:'sofá' }
+        ];
+
+        const fc = { deck: [], index: 0, score: 0, answered: false };
+
+        function shuffleArray(arr) {
+            const a = [...arr];
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+        }
+
+        function initFlashSession() {
+            fc.deck = shuffleArray(VOCABULARY).slice(0, 10);
+            fc.index = 0;
+            fc.score = 0;
+            fc.answered = false;
+            DOM.flashGameView.style.display = 'flex';
+            DOM.flashResultView.classList.remove('visible');
+            renderFlash();
+        }
+
+        function renderFlash() {
+            const card = fc.deck[fc.index];
+
+            DOM.flashEmoji.textContent = card.emoji;
+            DOM.flashCounter.textContent = `${fc.index + 1} / 10`;
+            DOM.flashProgressFill.style.width = `${(fc.index + 1) * 10}%`;
+
+            // 3 distractores únicos + 1 correcta → barajar
+            const distractors = shuffleArray(
+                VOCABULARY.filter(v => v.word !== card.word)
+            ).slice(0, 3);
+            const options = shuffleArray([card, ...distractors]);
+
+            DOM.flashOptions.innerHTML = '';
+            options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = 'flashcard-btn';
+                btn.textContent = opt.word;
+                btn.addEventListener('click', () => handleFlashAnswer(opt.word, card.word, btn));
+                DOM.flashOptions.appendChild(btn);
+            });
+        }
+
+        function handleFlashAnswer(selected, correct, clickedBtn) {
+            if (fc.answered) return;
+            fc.answered = true;
+
+            // Deshabilitar todos los botones
+            DOM.flashOptions.querySelectorAll('.flashcard-btn').forEach(b => b.disabled = true);
+
+            if (selected === correct) {
+                fc.score++;
+                clickedBtn.classList.add('correct');
+            } else {
+                clickedBtn.classList.add('wrong');
+                // Resaltar la correcta
+                DOM.flashOptions.querySelectorAll('.flashcard-btn').forEach(b => {
+                    if (b.textContent === correct) b.classList.add('correct');
+                });
+            }
+
+            setTimeout(nextFlash, 1200);
+        }
+
+        function nextFlash() {
+            if (fc.index < 9) {
+                fc.index++;
+                fc.answered = false;
+                renderFlash();
+            } else {
+                showFlashResult();
+            }
+        }
+
+        function showFlashResult() {
+            DOM.flashGameView.style.display = 'none';
+            DOM.flashResultView.classList.add('visible');
+
+            const pct = fc.score * 10;
+            let emoji, msg;
+            if (fc.score >= 9)      { emoji = '🏆'; msg = '¡Perfecto! Excelente trabajo.'; }
+            else if (fc.score >= 7) { emoji = '⭐'; msg = `¡Muy bien! ${fc.score} de 10 correctas.`; }
+            else if (fc.score >= 5) { emoji = '👍'; msg = `Bien. ${fc.score} de 10 correctas. ¡Sigue practicando!`; }
+            else                    { emoji = '💪'; msg = `${fc.score} de 10. ¡No te rindas, inténtalo de nuevo!`; }
+
+            DOM.flashScore.textContent = emoji;
+            DOM.flashMsg.textContent = msg;
+        }
+
+        // ========================================
+        // BLOQUE 22: MODO SIMULADO TOGGLE
         // ========================================
         function toggleSimulatedMode() {
             if (state.useSimulatedMode) {
@@ -1613,10 +1753,10 @@
                 DOM.tabSimulado.classList.remove('active');
                 updateStatusBar('Activa', 'listening');
             } else {
-                // Detener MediaRecorder si estaba grabando
-                if (state.mediaRecorder?.state === 'recording') {
+                // Detener recognition si estaba activo
+                if (state.recognition) {
                     state.isListening = false;
-                    state.mediaRecorder.stop();
+                    try { state.recognition.stop(); } catch(e) {}
                 }
                 DOM.tabSimulado.classList.add('active');
                 startSimulatedMode();
@@ -1630,6 +1770,11 @@
         DOM.tabRadar.addEventListener('click', () => switchScreen('radar'));
         DOM.btnMicToggle.addEventListener('click', toggleMic);
         DOM.tabSimulado.addEventListener('click', toggleSimulatedMode);
+        DOM.tabAprende.addEventListener('click', () => {
+            switchScreen('flashcard');
+            if (fc.deck.length === 0) initFlashSession();
+        });
+        DOM.flashRestart.addEventListener('click', initFlashSession);
 
         DOM.cardSiren.addEventListener('click', triggerSirenAlert);
         DOM.cardHorn.addEventListener('click', triggerHornAlert);
