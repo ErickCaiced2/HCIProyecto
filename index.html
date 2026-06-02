@@ -1120,9 +1120,10 @@
 
                         if (state.networkErrorCount >= state.maxNetworkErrors) {
                             console.warn(`🚫 Cambiando a MODO SIMULADO tras ${state.networkErrorCount} errores de red`);
+                            state.recognition.stop(); // Detener reconocimiento
                             state.isListening = false; // Evitar reintentos
-                            updateStatusBar('Red no disponible - Modo Simulación activado', 'warning');
-                            // El onend se encargará de iniciar modo simulado
+                            // Llamar directamente a modo simulado
+                            setTimeout(() => startSimulatedMode(), 500);
                         } else {
                             const remaining = state.maxNetworkErrors - state.networkErrorCount;
                             updateStatusBar(`Error de red - Reintentando (${remaining} intentos restantes)...`, 'warning');
@@ -1536,41 +1537,52 @@
             state.usingSpeechAPI = false;
 
             // Mostrar notificación al usuario
-            showAlert('📡 Modo Simulación: Web Speech API no disponible en tu región/red', false);
+            showAlert('📡 Modo Simulación: Web Speech API no disponible - Usando frases de demostración', false);
             updateStatusBar('Modo Simulación Activo', 'warning');
 
+            // Generar primera burbuja inmediatamente
+            generateSimulatedBubble();
+
+            // Luego continuar cada 4 segundos
             const interval = setInterval(() => {
-                if (!state.isListening || state.paused || !state.useSimulatedMode) return;
-
-                const phrase = simulatedPhrases[simulatedIndex % simulatedPhrases.length];
-                simulatedIndex++;
-
-                const isLaughter = Math.random() < 0.2;
-
-                if (isLaughter) {
-                    console.log('😄 Insertando burbuja de risas (modo simulación)');
-                    insertLaughBubble();
-                    updateStatusBar('Escuchando...', 'listening');
-                } else {
-                    console.log(`📝 Insertando frase simulada: "${phrase}"`);
-                    const bubble = document.createElement('div');
-                    bubble.className = 'message-bubble normal final';
-                    bubble.textContent = phrase;
-
-                    const timestamp = document.createElement('div');
-                    timestamp.className = 'bubble-timestamp';
-                    timestamp.textContent = getCurrentTime();
-                    bubble.appendChild(timestamp);
-
-                    DOM.chatContainer.appendChild(bubble);
-
-                    const wordCount = phrase.trim().split(/\s+/).length;
-                    state.totalWords += wordCount;
-                    updateWordCount();
+                if (!state.isListening || state.paused || !state.useSimulatedMode) {
+                    console.log('Deteniendo intervalo simulado');
+                    clearInterval(interval);
+                    return;
                 }
+                generateSimulatedBubble();
+            }, 4000);
+        }
 
-                scrollToBottomIfAtBottom();
-            }, 3500);
+        function generateSimulatedBubble() {
+            const phrase = simulatedPhrases[simulatedIndex % simulatedPhrases.length];
+            simulatedIndex++;
+
+            const isLaughter = Math.random() < 0.2;
+
+            if (isLaughter) {
+                console.log('😄 Insertando burbuja de risas (modo simulación)');
+                insertLaughBubble();
+                updateStatusBar('Escuchando...', 'listening');
+            } else {
+                console.log(`📝 Insertando frase simulada: "${phrase}"`);
+                const bubble = document.createElement('div');
+                bubble.className = 'message-bubble normal final';
+                bubble.textContent = phrase;
+
+                const timestamp = document.createElement('div');
+                timestamp.className = 'bubble-timestamp';
+                timestamp.textContent = getCurrentTime();
+                bubble.appendChild(timestamp);
+
+                DOM.chatContainer.appendChild(bubble);
+
+                const wordCount = phrase.trim().split(/\s+/).length;
+                state.totalWords += wordCount;
+                updateWordCount();
+            }
+
+            scrollToBottomIfAtBottom();
         }
 
         // ========================================
