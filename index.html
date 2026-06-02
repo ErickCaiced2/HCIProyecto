@@ -923,7 +923,9 @@
             totalWords: 0,
             lastTimeSeparatorTime: 0,
             usingSpeechAPI: true,
-            useSimulatedMode: false
+            useSimulatedMode: false,
+            networkErrorCount: 0,
+            maxNetworkErrors: 3
         };
 
         // Palabras clave para detección contextual
@@ -1079,6 +1081,7 @@
             // === RESULTADO DE TRANSCRIPCIÓN ===
             state.recognition.onstart = () => {
                 console.log('✅ Reconocimiento iniciado, escuchando...');
+                state.networkErrorCount = 0; // Reset error counter on success
                 updateStatusBar('Activa', 'listening');
             };
 
@@ -1107,9 +1110,17 @@
 
                 switch(event.error) {
                     case 'network':
+                        state.networkErrorCount++;
                         console.error('⚠️  PROBLEMA DE RED: Verifica tu conexión a Internet');
                         console.error('   Web Speech API requiere contacto con servidores de Google');
-                        updateStatusBar('Error de red - Verifica conexión a Internet', 'error');
+
+                        if (state.networkErrorCount >= state.maxNetworkErrors) {
+                            console.warn(`🔄 ${state.networkErrorCount} errores de red detectados - Cambiando a MODO SIMULADO`);
+                            updateStatusBar('Red unavailable - Modo simulación activado', 'warning');
+                            setTimeout(() => startSimulatedMode(), 1000);
+                        } else {
+                            updateStatusBar(`Error de red (${state.networkErrorCount}/${state.maxNetworkErrors}) - Reintentando...`, 'warning');
+                        }
                         break;
                     case 'not-allowed':
                         console.error('🚫 Micrófono bloqueado - Permite acceso al micrófono');
@@ -1506,10 +1517,14 @@
         let simulatedIndex = 0;
 
         function startSimulatedMode() {
-            console.log('✅ MODO SIMULACIÓN ACTIVADO');
+            console.log('✅ MODO SIMULACIÓN ACTIVADO (Red no disponible)');
             state.useSimulatedMode = true;
             state.isListening = true;
-            updateStatusBar('Modo simulación activo', 'warning');
+            state.usingSpeechAPI = false;
+
+            // Mostrar notificación al usuario
+            showAlert('📡 Modo Simulación: Web Speech API no disponible en tu región/red', false);
+            updateStatusBar('Modo Simulación Activo', 'warning');
 
             const interval = setInterval(() => {
                 if (!state.isListening || state.paused || !state.useSimulatedMode) return;
@@ -1520,11 +1535,11 @@
                 const isLaughter = Math.random() < 0.2;
 
                 if (isLaughter) {
-                    console.log('😄 Insertando burbuja de risas');
+                    console.log('😄 Insertando burbuja de risas (modo simulación)');
                     insertLaughBubble();
                     updateStatusBar('Escuchando...', 'listening');
                 } else {
-                    console.log(`📝 Insertando frase: "${phrase}"`);
+                    console.log(`📝 Insertando frase simulada: "${phrase}"`);
                     const bubble = document.createElement('div');
                     bubble.className = 'message-bubble normal final';
                     bubble.textContent = phrase;
