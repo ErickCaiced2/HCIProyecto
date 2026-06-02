@@ -897,11 +897,7 @@
     <div class="notification-alert" id="alertNotification" role="alert"></div>
 
     <script>
-        // === INICIO CAMBIOS V3: Web Speech API ===
-
-        // NOTA DE PRIVACIDAD: Web Speech API (webkitSpeechRecognition) envía el audio
-        // a los servidores de Google para procesamiento. Para producción con datos sensibles,
-        // considerar Whisper API con procesamiento local o self-hosted.
+        // === TRANSCRIPCIÓN OFFLINE CON WHISPER (Transformers.js) ===
 
         // ========================================
         // BLOQUE 1: VARIABLES GLOBALES Y ESTADO
@@ -917,15 +913,14 @@
             lastHighAlertTime: 0,
             paused: false,
 
-            // Web Speech API
-            recognition: null,
+            // Whisper / Transformers.js
+            whisperPipeline: null,
+            mediaRecorder: null,
+            whisperReady: false,
             isListening: false,
             totalWords: 0,
             lastTimeSeparatorTime: 0,
-            usingSpeechAPI: true,
-            useSimulatedMode: false,
-            networkErrorCount: 0,
-            maxNetworkErrors: 2
+            useSimulatedMode: false
         };
 
         // Palabras clave para detección contextual
@@ -1051,130 +1046,106 @@
                 updateStatusBar('Micrófono bloqueado — revisa permisos del navegador', 'error');
             }
 
-            // Inicializar Web Speech API (independiente del permiso del micrófono)
-            initSpeechRecognition();
+            // Inicializar Whisper (independiente del permiso del micrófono)
+            initWhisperTranscription();
         }
 
         // ========================================
-        // BLOQUE 5: INICIALIZACIÓN WEB SPEECH API (VERSIÓN MEJORADA)
+        // BLOQUE 5: TRANSCRIPCIÓN OFFLINE CON WHISPER (Transformers.js)
         // ========================================
-        function initSpeechRecognition() {
-            // Verificar soporte
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-            if (!SpeechRecognition) {
-                console.warn('❌ Web Speech API no soportada en este navegador');
-                updateStatusBar('Tu navegador no soporta reconocimiento de voz', 'warning');
-                state.usingSpeechAPI = false;
-                return;
-            }
-
-            console.log('🎤 Inicializando Web Speech Recognition...');
-            state.recognition = new SpeechRecognition();
-
-            // Configuración para máxima compatibilidad
-            state.recognition.language = 'es';  // Español genérico (más compatible)
-            state.recognition.continuous = true;
-            state.recognition.interimResults = true;
-            state.recognition.maxAlternatives = 1;
-
-            // === RESULTADO DE TRANSCRIPCIÓN ===
-            state.recognition.onstart = () => {
-                console.log('✅ Reconocimiento iniciado, escuchando...');
-                // NO reseteamos aquí - solo cuando recibimos resultados exitosos
-                updateStatusBar('Activa', 'listening');
-            };
-
-            state.recognition.onresult = (event) => {
-                console.log(`📊 Resultados recibidos: ${event.results.length}`);
-
-                // Reset contador de errores cuando recibimos datos válidos
-                state.networkErrorCount = 0;
-
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    const transcript = event.results[i][0].transcript.trim();
-                    const isFinal = event.results[i].isFinal;
-                    const confidence = event.results[i][0].confidence;
-
-                    console.log(`  ${isFinal ? '✓ FINAL' : '○ interim'} (${Math.round(confidence*100)}%): "${transcript}"`);
-
-                    if (!isFinal) {
-                        // Interim: mostrar en vivo
-                        updateLiveBubble(transcript);
-                    } else {
-                        // Final: guardar permanente
-                        commitBubble(transcript);
-                    }
-                }
-            };
-
-            state.recognition.onerror = (event) => {
-                console.error(`❌ Error: ${event.error}`);
-
-                switch(event.error) {
-                    case 'network':
-                        state.networkErrorCount++;
-                        console.error('⚠️  PROBLEMA DE RED: Verifica tu conexión a Internet');
-                        console.error('   Web Speech API requiere contacto con servidores de Google');
-                        console.warn(`📊 Contador de errores: ${state.networkErrorCount}/${state.maxNetworkErrors}`);
-
-                        if (state.networkErrorCount >= state.maxNetworkErrors) {
-                            console.warn(`🚫 Cambiando a MODO SIMULADO tras ${state.networkErrorCount} errores de red`);
-                            state.recognition.stop(); // Detener reconocimiento
-                            state.isListening = false; // Evitar reintentos
-                            // Llamar directamente a modo simulado
-                            setTimeout(() => startSimulatedMode(), 500);
-                        } else {
-                            const remaining = state.maxNetworkErrors - state.networkErrorCount;
-                            updateStatusBar(`Error de red - Reintentando (${remaining} intentos restantes)...`, 'warning');
-                        }
-                        break;
-                    case 'not-allowed':
-                        console.error('🚫 Micrófono bloqueado - Permite acceso al micrófono');
-                        updateStatusBar('Micrófono bloqueado o denegado', 'error');
-                        break;
-                    case 'no-speech':
-                        console.log('🔇 No hay sonido detectado (silencio)');
-                        // No mostrar alerta, es normal
-                        break;
-                    case 'audio-capture':
-                        console.error('🎤 No hay dispositivo de micrófono disponible');
-                        updateStatusBar('Sin micrófono disponible', 'error');
-                        break;
-                    default:
-                        console.error(`Error desconocido: ${event.error}`);
-                }
-            };
-
-            state.recognition.onend = () => {
-                console.log('🛑 Reconocimiento detenido');
-                if (state.isListening && !state.paused) {
-                    // Verificar si hay demasiados errores de red
-                    if (state.networkErrorCount >= state.maxNetworkErrors) {
-                        console.warn(`🔄 Máximo de errores alcanzado (${state.networkErrorCount}/${state.maxNetworkErrors}) - Activando Modo Simulación`);
-                        startSimulatedMode();
-                        return;
-                    }
-
-                    console.log('🔄 Reiniciando automáticamente...');
-                    setTimeout(() => {
-                        try {
-                            state.recognition.start();
-                        } catch(e) {
-                            console.log('(Ya está en progreso)');
-                        }
-                    }, 100);
-                }
-            };
-
-            // Iniciar escucha
-            state.isListening = true;
+        async function initWhisperTranscription() {
+            updateStatusBar('Cargando modelo de IA (~40 MB)...', 'warning');
             try {
-                state.recognition.start();
-                console.log('🎙️ Web Speech API activado - ESPERA A QUE APAREZCA UNA BURBUJA GRIS MIENTRAS HABLAS');
-            } catch (e) {
-                console.log('📌 Recognition ya estaba activo:', e.message);
+                const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+
+                state.whisperPipeline = await pipeline(
+                    'automatic-speech-recognition',
+                    'Xenova/whisper-tiny',
+                    {
+                        progress_callback: (progress) => {
+                            if (progress.status === 'downloading' && progress.total > 0) {
+                                const pct = Math.round(progress.loaded / progress.total * 100);
+                                updateStatusBar(`Descargando modelo... ${pct}%`, 'warning');
+                            } else if (progress.status === 'ready') {
+                                updateStatusBar('Modelo listo', 'listening');
+                            }
+                        }
+                    }
+                );
+
+                state.whisperReady = true;
+                state.isListening = true;
+                updateStatusBar('Activa', 'listening');
+                startChunkRecording();
+            } catch (err) {
+                console.error('Error cargando modelo Whisper:', err);
+                updateStatusBar('Modelo no disponible — usando simulación', 'warning');
+                setTimeout(() => startSimulatedMode(), 500);
             }
+        }
+
+        function startChunkRecording() {
+            if (state.paused || !state.whisperReady || !state.mediaStream) return;
+
+            const chunks = [];
+            const recorder = new MediaRecorder(state.mediaStream);
+            state.mediaRecorder = recorder;
+
+            recorder.ondataavailable = (e) => {
+                if (e.data.size > 0) chunks.push(e.data);
+            };
+
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: recorder.mimeType });
+                transcribeChunk(blob).finally(() => {
+                    if (state.isListening && !state.paused) {
+                        startChunkRecording();
+                    }
+                });
+            };
+
+            recorder.start();
+            setTimeout(() => {
+                if (recorder.state === 'recording') recorder.stop();
+            }, 5000);
+        }
+
+        async function transcribeChunk(blob) {
+            updateLiveBubble('...');
+            updateStatusBar('Transcribiendo...', 'interim');
+            try {
+                const arrayBuffer = await blob.arrayBuffer();
+                const tmpCtx = new AudioContext();
+                const decoded = await tmpCtx.decodeAudioData(arrayBuffer);
+                tmpCtx.close();
+
+                const offlineCtx = new OfflineAudioContext(1, Math.ceil(decoded.duration * 16000), 16000);
+                const source = offlineCtx.createBufferSource();
+                source.buffer = decoded;
+                source.connect(offlineCtx.destination);
+                source.start(0);
+                const resampled = await offlineCtx.startRendering();
+                const float32 = resampled.getChannelData(0);
+
+                const result = await state.whisperPipeline(float32, { language: 'spanish', task: 'transcribe' });
+                const text = result.text?.trim();
+
+                if (!text || text.length < 3 || text.includes('[BLANK') || text.toLowerCase().includes('subtítulo')) {
+                    clearLiveBubble();
+                } else {
+                    commitBubble(text);
+                }
+                updateStatusBar('Activa', 'listening');
+            } catch (err) {
+                console.error('Error transcribiendo chunk:', err);
+                clearLiveBubble();
+                updateStatusBar('Activa', 'listening');
+            }
+        }
+
+        function clearLiveBubble() {
+            const bubble = document.getElementById('bubble-live');
+            if (bubble) bubble.remove();
         }
 
         // ========================================
@@ -1488,32 +1459,24 @@
         // BLOQUE 17: CONTROL DEL MICRÓFONO
         // ========================================
         function toggleMic() {
-            if (!state.usingSpeechAPI) return;
-
             state.paused = !state.paused;
 
             if (state.paused) {
-                // Pausar
                 state.audioContext?.suspend();
-                if (state.recognition) {
-                    state.recognition.stop();
-                    state.isListening = false;
+                if (state.mediaRecorder?.state === 'recording') {
+                    state.mediaRecorder.stop();
                 }
+                state.isListening = false;
                 DOM.btnMicToggle.textContent = 'Reanudar';
                 updateStatusBar('En pausa · Micrófono detenido', 'paused');
             } else {
-                // Reanudar
                 state.audioContext?.resume();
-                if (state.recognition) {
-                    state.isListening = true;
-                    try {
-                        state.recognition.start();
-                    } catch (e) {
-                        console.log('Recognition ya está activa');
-                    }
-                }
+                state.isListening = true;
                 DOM.btnMicToggle.textContent = 'Pausar';
-                updateStatusBar('Escuchando...', 'listening');
+                updateStatusBar('Activa', 'listening');
+                if (state.whisperReady) {
+                    startChunkRecording();
+                }
             }
         }
 
@@ -1534,10 +1497,9 @@
             console.log('✅ MODO SIMULACIÓN ACTIVADO (Red no disponible)');
             state.useSimulatedMode = true;
             state.isListening = true;
-            state.usingSpeechAPI = false;
 
             // Mostrar notificación al usuario
-            showAlert('📡 Modo Simulación: Web Speech API no disponible - Usando frases de demostración', false);
+            showAlert('📡 Modo Simulación: Transcripción no disponible - Usando frases de demostración', false);
             updateStatusBar('Modo Simulación Activo', 'warning');
 
             // Generar primera burbuja inmediatamente
