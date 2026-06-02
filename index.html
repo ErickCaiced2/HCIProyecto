@@ -840,22 +840,62 @@
         .signs-lang { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
         .signs-close { background: var(--bg-card); border: none; color: var(--text-secondary); width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; }
 
-        #signs-iframe-wrap { flex: 1; position: relative; min-height: 280px; }
-        #signs-iframe { width: 100%; height: 100%; border: none; background: var(--bg-card); }
-
-        #signs-fallback {
-            display: none;
+        #signs-finger-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 12px 20px 8px;
+            justify-content: center;
+        }
+        .sign-letter-card {
+            display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            gap: 16px;
-            padding: 32px 24px;
-            flex: 1;
+            gap: 4px;
+            background: var(--bg-card);
+            border-radius: 10px;
+            padding: 6px 4px 4px;
+            width: 56px;
         }
-        #signs-fallback.visible { display: flex; }
-        .signs-fallback-icon { font-size: 48px; }
-        .signs-fallback-text { font-size: 14px; color: var(--text-secondary); text-align: center; }
-        .btn-signs-open { background: #a78bfa; border: none; color: #fff; padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; }
+        .sign-letter-img {
+            width: 48px;
+            height: 48px;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+        .sign-letter-img.broken { display: none; }
+        .sign-letter-placeholder {
+            width: 48px;
+            height: 48px;
+            background: var(--bg-card-hover);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            font-weight: 700;
+            color: #a78bfa;
+        }
+        .sign-letter-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        .signs-actions { padding: 12px 20px 4px; }
+        .btn-signs-yt {
+            width: 100%;
+            background: #ff0000;
+            border: none;
+            color: #fff;
+            padding: 13px 16px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.2px;
+        }
+        .btn-signs-yt:hover { opacity: 0.88; }
 
         /* ========================================
            FLASHCARDS - ASOCIAR IMAGEN PALABRA
@@ -1042,17 +1082,13 @@
             <div class="signs-header">
                 <div>
                     <div class="signs-word" id="signsWord"></div>
-                    <div class="signs-lang">Lengua de Señas · SpreadTheSign</div>
+                    <div class="signs-lang">Deletreo manual · Lengua de Señas</div>
                 </div>
                 <button class="signs-close" id="signsClose" aria-label="Cerrar">✕</button>
             </div>
-            <div id="signs-iframe-wrap">
-                <iframe id="signs-iframe" title="Seña" allowfullscreen></iframe>
-            </div>
-            <div id="signs-fallback">
-                <div class="signs-fallback-icon">🤟</div>
-                <div class="signs-fallback-text">No se pudo cargar el video aquí.<br>Ábrelo en el navegador.</div>
-                <button class="btn-signs-open" id="signsOpenBtn">Ver seña en SpreadTheSign</button>
+            <div id="signs-finger-wrap"></div>
+            <div class="signs-actions">
+                <button class="btn-signs-yt" id="signsYtBtn">🎬 Ver seña completa en YouTube</button>
             </div>
         </div>
     </div>
@@ -1860,48 +1896,67 @@
         // ========================================
         // BLOQUE 22: LENGUA DE SEÑAS
         // ========================================
-        const signsModal   = document.getElementById('signs-modal');
-        const signsBackdrop= document.getElementById('signs-backdrop');
-        const signsSheet   = document.getElementById('signs-sheet');
-        const signsWordEl  = document.getElementById('signsWord');
-        const signsIframe  = document.getElementById('signs-iframe');
-        const signsFallback= document.getElementById('signs-fallback');
-        const signsOpenBtn = document.getElementById('signsOpenBtn');
-        const signsClose   = document.getElementById('signsClose');
+        const signsModal    = document.getElementById('signs-modal');
+        const signsBackdrop = document.getElementById('signs-backdrop');
+        const signsWordEl   = document.getElementById('signsWord');
+        const signsFingerWrap = document.getElementById('signs-finger-wrap');
+        const signsYtBtn    = document.getElementById('signsYtBtn');
+        const signsClose    = document.getElementById('signsClose');
 
-        function buildSignUrl(word) {
-            const clean = encodeURIComponent(word.toLowerCase().replace(/[.,!?;:]/g, ''));
-            return `https://www.spreadthesign.com/es.co/search/?query=${clean}`;
+        // Wikimedia Commons: alfabeto dactilológico (LSE / manual alphabet)
+        // URL patrón: letra normalizada sin tilde
+        const SIGN_IMG = {
+            a:'A',b:'B',c:'C',d:'D',e:'E',f:'F',g:'G',h:'H',i:'I',
+            j:'J',k:'K',l:'L',m:'M',n:'N',ñ:'N',o:'O',p:'P',q:'Q',
+            r:'R',s:'S',t:'T',u:'U',v:'V',w:'W',x:'X',y:'Y',z:'Z'
+        };
+
+        function letterImgUrl(letter) {
+            const l = (SIGN_IMG[letter] || letter.toUpperCase());
+            return `https://upload.wikimedia.org/wikipedia/commons/thumb/0/0c/Sign_language_${l}.svg/80px-Sign_language_${l}.svg.png`;
         }
 
         function openSignsModal(word) {
-            const url = buildSignUrl(word);
+            const clean = word.toLowerCase().replace(/[^a-záéíóúñü]/g, '');
             signsWordEl.textContent = word;
-            signsIframe.src = '';
-            signsFallback.classList.remove('visible');
-            signsIframe.parentElement.style.display = 'block';
 
-            // Timeout: si el iframe no cargó en 5s, mostrar fallback
-            const timer = setTimeout(() => {
-                signsIframe.parentElement.style.display = 'none';
-                signsFallback.classList.add('visible');
-            }, 5000);
+            // Construir deletreo manual letra por letra
+            signsFingerWrap.innerHTML = '';
+            [...clean].forEach(ch => {
+                const card = document.createElement('div');
+                card.className = 'sign-letter-card';
 
-            signsIframe.onload = () => clearTimeout(timer);
-            signsIframe.onerror = () => {
-                clearTimeout(timer);
-                signsIframe.parentElement.style.display = 'none';
-                signsFallback.classList.add('visible');
-            };
+                const img = document.createElement('img');
+                img.className = 'sign-letter-img';
+                img.alt = ch.toUpperCase();
+                img.onerror = function() {
+                    this.classList.add('broken');
+                    // Mostrar placeholder si la imagen falla
+                    const ph = document.createElement('div');
+                    ph.className = 'sign-letter-placeholder';
+                    ph.textContent = ch.toUpperCase();
+                    card.insertBefore(ph, this);
+                };
+                img.src = letterImgUrl(ch);
 
-            signsOpenBtn.onclick = () => window.open(url, '_blank');
-            signsIframe.src = url;
+                const label = document.createElement('div');
+                label.className = 'sign-letter-label';
+                label.textContent = ch.toUpperCase();
+
+                card.appendChild(img);
+                card.appendChild(label);
+                signsFingerWrap.appendChild(card);
+            });
+
+            // Botón YouTube para la seña completa
+            const query = encodeURIComponent(`seña "${word}" lengua de señas`);
+            signsYtBtn.onclick = () => window.open(`https://www.youtube.com/results?search_query=${query}`, '_blank');
+
             signsModal.classList.add('open');
         }
 
         function closeSignsModal() {
             signsModal.classList.remove('open');
-            setTimeout(() => { signsIframe.src = ''; }, 300);
         }
 
         signsClose.addEventListener('click', closeSignsModal);
