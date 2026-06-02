@@ -1904,56 +1904,83 @@
         const signsYtBtn    = document.getElementById('signsYtBtn');
         const signsClose    = document.getElementById('signsClose');
 
-        // Wikimedia Commons: alfabeto dactilológico (LSE / manual alphabet)
-        // URL patrón: letra normalizada sin tilde
         const SIGN_IMG = {
             a:'A',b:'B',c:'C',d:'D',e:'E',f:'F',g:'G',h:'H',i:'I',
             j:'J',k:'K',l:'L',m:'M',n:'N',ñ:'N',o:'O',p:'P',q:'Q',
             r:'R',s:'S',t:'T',u:'U',v:'V',w:'W',x:'X',y:'Y',z:'Z'
         };
 
-        function letterImgUrl(letter) {
-            const l = (SIGN_IMG[letter] || letter.toUpperCase());
-            return `https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/Sign_language_${l}.svg&width=80`;
+        let _signUrlsCache = null;
+        let _signUrlsPromise = null;
+
+        function loadSignAlphabet() {
+            if (_signUrlsCache) return Promise.resolve(_signUrlsCache);
+            if (_signUrlsPromise) return _signUrlsPromise;
+            const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            const titles = [...letters].map(l => `File:Sign_language_${l}.svg`).join('|');
+            const apiUrl = `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(titles)}&prop=imageinfo&iiprop=url&iiurlwidth=100&format=json&origin=*`;
+            _signUrlsPromise = fetch(apiUrl)
+                .then(r => r.json())
+                .then(data => {
+                    const urls = {};
+                    for (const page of Object.values(data.query.pages)) {
+                        const m = page.title && page.title.match(/Sign_language_([A-Z])\.svg/i);
+                        if (m && page.imageinfo && page.imageinfo[0] && page.imageinfo[0].thumburl) {
+                            urls[m[1].toUpperCase()] = page.imageinfo[0].thumburl;
+                        }
+                    }
+                    _signUrlsCache = urls;
+                    return urls;
+                })
+                .catch(() => { _signUrlsCache = {}; return {}; });
+            return _signUrlsPromise;
         }
 
         function openSignsModal(word) {
             const clean = word.toLowerCase().replace(/[^a-záéíóúñü]/g, '');
             signsWordEl.textContent = word;
+            signsFingerWrap.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:16px 0;">Cargando...</p>';
+            signsModal.classList.add('open');
 
-            // Construir deletreo manual letra por letra
-            signsFingerWrap.innerHTML = '';
-            [...clean].forEach(ch => {
-                const card = document.createElement('div');
-                card.className = 'sign-letter-card';
-
-                const img = document.createElement('img');
-                img.className = 'sign-letter-img';
-                img.alt = ch.toUpperCase();
-                img.onerror = function() {
-                    this.classList.add('broken');
-                    // Mostrar placeholder si la imagen falla
-                    const ph = document.createElement('div');
-                    ph.className = 'sign-letter-placeholder';
-                    ph.textContent = ch.toUpperCase();
-                    card.insertBefore(ph, this);
-                };
-                img.src = letterImgUrl(ch);
-
-                const label = document.createElement('div');
-                label.className = 'sign-letter-label';
-                label.textContent = ch.toUpperCase();
-
-                card.appendChild(img);
-                card.appendChild(label);
-                signsFingerWrap.appendChild(card);
-            });
-
-            // Botón YouTube para la seña completa
             const query = encodeURIComponent(`seña "${word}" lengua de señas`);
             signsYtBtn.onclick = () => window.open(`https://www.youtube.com/results?search_query=${query}`, '_blank');
 
-            signsModal.classList.add('open');
+            loadSignAlphabet().then(signUrls => {
+                signsFingerWrap.innerHTML = '';
+                [...clean].forEach(ch => {
+                    const card = document.createElement('div');
+                    card.className = 'sign-letter-card';
+
+                    const letterKey = SIGN_IMG[ch] || ch.toUpperCase();
+                    const imgUrl = signUrls[letterKey];
+
+                    if (imgUrl) {
+                        const img = document.createElement('img');
+                        img.className = 'sign-letter-img';
+                        img.alt = ch.toUpperCase();
+                        img.onerror = function() {
+                            this.classList.add('broken');
+                            const ph = document.createElement('div');
+                            ph.className = 'sign-letter-placeholder';
+                            ph.textContent = ch.toUpperCase();
+                            card.insertBefore(ph, this);
+                        };
+                        img.src = imgUrl;
+                        card.appendChild(img);
+                    } else {
+                        const ph = document.createElement('div');
+                        ph.className = 'sign-letter-placeholder';
+                        ph.textContent = ch.toUpperCase();
+                        card.appendChild(ph);
+                    }
+
+                    const label = document.createElement('div');
+                    label.className = 'sign-letter-label';
+                    label.textContent = ch.toUpperCase();
+                    card.appendChild(label);
+                    signsFingerWrap.appendChild(card);
+                });
+            });
         }
 
         function closeSignsModal() {
