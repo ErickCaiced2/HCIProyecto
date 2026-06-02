@@ -244,6 +244,10 @@
             color: var(--accent-blue);
         }
 
+        .nav-tab.simulado.active {
+            color: #f59e0b;
+        }
+
         .nav-icon {
             font-size: 20px;
         }
@@ -889,6 +893,10 @@
                     <span class="nav-icon">〰️</span>
                     <span>Modo Radar</span>
                 </button>
+                <button class="nav-tab simulado" id="tabSimulado">
+                    <span class="nav-icon">🎭</span>
+                    <span>Simulado</span>
+                </button>
             </nav>
         </div>
     </div>
@@ -959,7 +967,8 @@
 
             // Header
             headerSubtitle: document.getElementById('headerSubtitle'),
-            btnCopyTranscript: document.getElementById('btnCopyTranscript')
+            btnCopyTranscript: document.getElementById('btnCopyTranscript'),
+            tabSimulado: document.getElementById('tabSimulado')
         };
 
         // ========================================
@@ -1596,11 +1605,31 @@
         }
 
         // ========================================
-        // BLOQUE 21: EVENT LISTENERS
+        // BLOQUE 21: MODO SIMULADO TOGGLE
+        // ========================================
+        function toggleSimulatedMode() {
+            if (state.useSimulatedMode) {
+                state.useSimulatedMode = false;
+                DOM.tabSimulado.classList.remove('active');
+                updateStatusBar('Activa', 'listening');
+            } else {
+                // Detener MediaRecorder si estaba grabando
+                if (state.mediaRecorder?.state === 'recording') {
+                    state.isListening = false;
+                    state.mediaRecorder.stop();
+                }
+                DOM.tabSimulado.classList.add('active');
+                startSimulatedMode();
+            }
+        }
+
+        // ========================================
+        // BLOQUE 22: EVENT LISTENERS
         // ========================================
         DOM.tabSocial.addEventListener('click', () => switchScreen('social'));
         DOM.tabRadar.addEventListener('click', () => switchScreen('radar'));
         DOM.btnMicToggle.addEventListener('click', toggleMic);
+        DOM.tabSimulado.addEventListener('click', toggleSimulatedMode);
 
         DOM.cardSiren.addEventListener('click', triggerSirenAlert);
         DOM.cardHorn.addEventListener('click', triggerHornAlert);
