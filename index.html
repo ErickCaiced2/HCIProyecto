@@ -925,7 +925,7 @@
             usingSpeechAPI: true,
             useSimulatedMode: false,
             networkErrorCount: 0,
-            maxNetworkErrors: 3
+            maxNetworkErrors: 2
         };
 
         // Palabras clave para detección contextual
@@ -1081,12 +1081,15 @@
             // === RESULTADO DE TRANSCRIPCIÓN ===
             state.recognition.onstart = () => {
                 console.log('✅ Reconocimiento iniciado, escuchando...');
-                state.networkErrorCount = 0; // Reset error counter on success
+                // NO reseteamos aquí - solo cuando recibimos resultados exitosos
                 updateStatusBar('Activa', 'listening');
             };
 
             state.recognition.onresult = (event) => {
                 console.log(`📊 Resultados recibidos: ${event.results.length}`);
+
+                // Reset contador de errores cuando recibimos datos válidos
+                state.networkErrorCount = 0;
 
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript.trim();
@@ -1113,13 +1116,16 @@
                         state.networkErrorCount++;
                         console.error('⚠️  PROBLEMA DE RED: Verifica tu conexión a Internet');
                         console.error('   Web Speech API requiere contacto con servidores de Google');
+                        console.warn(`📊 Contador de errores: ${state.networkErrorCount}/${state.maxNetworkErrors}`);
 
                         if (state.networkErrorCount >= state.maxNetworkErrors) {
-                            console.warn(`🔄 ${state.networkErrorCount} errores de red detectados - Cambiando a MODO SIMULADO`);
-                            updateStatusBar('Red unavailable - Modo simulación activado', 'warning');
-                            setTimeout(() => startSimulatedMode(), 1000);
+                            console.warn(`🚫 Cambiando a MODO SIMULADO tras ${state.networkErrorCount} errores de red`);
+                            state.isListening = false; // Evitar reintentos
+                            updateStatusBar('Red no disponible - Modo Simulación activado', 'warning');
+                            // El onend se encargará de iniciar modo simulado
                         } else {
-                            updateStatusBar(`Error de red (${state.networkErrorCount}/${state.maxNetworkErrors}) - Reintentando...`, 'warning');
+                            const remaining = state.maxNetworkErrors - state.networkErrorCount;
+                            updateStatusBar(`Error de red - Reintentando (${remaining} intentos restantes)...`, 'warning');
                         }
                         break;
                     case 'not-allowed':
@@ -1128,7 +1134,7 @@
                         break;
                     case 'no-speech':
                         console.log('🔇 No hay sonido detectado (silencio)');
-                        updateStatusBar('En espera de sonido...', 'listening');
+                        // No mostrar alerta, es normal
                         break;
                     case 'audio-capture':
                         console.error('🎤 No hay dispositivo de micrófono disponible');
@@ -1142,6 +1148,13 @@
             state.recognition.onend = () => {
                 console.log('🛑 Reconocimiento detenido');
                 if (state.isListening && !state.paused) {
+                    // Verificar si hay demasiados errores de red
+                    if (state.networkErrorCount >= state.maxNetworkErrors) {
+                        console.warn(`🔄 Máximo de errores alcanzado (${state.networkErrorCount}/${state.maxNetworkErrors}) - Activando Modo Simulación`);
+                        startSimulatedMode();
+                        return;
+                    }
+
                     console.log('🔄 Reiniciando automáticamente...');
                     setTimeout(() => {
                         try {
