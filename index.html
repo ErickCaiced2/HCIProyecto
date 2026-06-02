@@ -917,6 +917,7 @@
             whisperPipeline: null,
             mediaRecorder: null,
             whisperReady: false,
+            decodeCtx: null,
             isListening: false,
             totalWords: 0,
             lastTimeSeparatorTime: 0,
@@ -1075,6 +1076,9 @@
                     }
                 );
 
+                // AudioContext dedicado solo para decodificar audio (no comparte con el radar)
+                state.decodeCtx = new AudioContext();
+
                 state.whisperReady = true;
                 state.isListening = true;
                 updateStatusBar('Activa', 'listening');
@@ -1117,9 +1121,8 @@
             updateStatusBar('Transcribiendo...', 'interim');
             try {
                 const arrayBuffer = await blob.arrayBuffer();
-                const tmpCtx = new AudioContext();
-                const decoded = await tmpCtx.decodeAudioData(arrayBuffer);
-                tmpCtx.close();
+                // Usar contexto dedicado para decodificar (no toca el AudioContext del radar)
+                const decoded = await state.decodeCtx.decodeAudioData(arrayBuffer);
 
                 const offlineCtx = new OfflineAudioContext(1, Math.ceil(decoded.duration * 16000), 16000);
                 const source = offlineCtx.createBufferSource();
@@ -1132,7 +1135,13 @@
                 const result = await state.whisperPipeline(float32, { language: 'spanish', task: 'transcribe' });
                 const text = result.text?.trim();
 
-                if (!text || text.length < 3 || text.includes('[BLANK') || text.toLowerCase().includes('subtítulo')) {
+                const isNoise = !text || text.length < 3
+                    || /^\[.+\]$/.test(text)           // anotaciones puras: [Música], [Ruido], [Music]…
+                    || text.includes('[BLANK')
+                    || text.toLowerCase().includes('subtítulo')
+                    || text.toLowerCase().includes('amara.org');
+
+                if (isNoise) {
                     clearLiveBubble();
                 } else {
                     commitBubble(text);
