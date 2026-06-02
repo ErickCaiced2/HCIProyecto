@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotDiffPersistence">
+    <option name="pendingDiffs">
+      <map>
+        <entry key="$PROJECT_DIR$/.vercelignore">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/.vercelignore" />
+              <option name="updatedContent" value="TESTING.md&#10;CHANGELOG_V3.md&#10;README.md&#10;PERSONALIZATION.md&#10;pom.xml&#10;.git&#10;.gitignore&#10;node_modules&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/DEPLOY_VERCEL.md">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/DEPLOY_VERCEL.md" />
+              <option name="updatedContent" value="#  EchoVis v3 — Despliegue en Vercel&#10;&#10;## ¿Por qué Vercel y no localhost?&#10;&#10;**Web Speech API requiere:**&#10;- ✅ HTTPS (seguridad)&#10;- ✅ Conexión a internet (para contactar Google)&#10;- ✅ Servidor en línea&#10;&#10;**Localhost sin internet no funciona** porque Web Speech API necesita conectarse a `https://www.google.com/speech-api/` para procesar el audio.&#10;&#10;---&#10;&#10;##  Pasos para Desplegar&#10;&#10;### **Opción 1: Despliegue automático (RECOMENDADO)**&#10;&#10;#### 1. Sube el código a GitHub&#10;```bash&#10;git init&#10;git add .&#10;git commit -m &quot;EchoVis v3 - Web Speech API&quot;&#10;git remote add origin https://github.com/TU_USUARIO/echovis.git&#10;git push -u origin main&#10;```&#10;&#10;#### 2. Conecta Vercel a tu repositorio&#10;1. Ve a https://vercel.com&#10;2. Haz clic en &quot;New Project&quot;&#10;3. Selecciona tu repositorio de GitHub&#10;4. Haz clic en &quot;Deploy&quot;&#10;&#10;**¡Listo!** Vercel detectará automáticamente que es HTML estático y lo despliegará.&#10;&#10;---&#10;&#10;### **Opción 2: Despliegue manual (SIN GitHub)**&#10;&#10;#### 1. Instala Vercel CLI&#10;```bash&#10;npm install -g vercel&#10;```&#10;&#10;#### 2. Desde la carpeta del proyecto&#10;```bash&#10;cd C:\Users\ERICK CAICEDO\IdeaProjects\untitled1&#10;vercel&#10;```&#10;&#10;Sigue las instrucciones interactivas. **¡Listo!**&#10;&#10;---&#10;&#10;## ✅ Qué Pasará Después del Despliegue&#10;&#10;Una vez desplegado en Vercel:&#10;1. Recibirás una URL como: `https://echovis.vercel.app/`&#10;2. Abre esa URL en Chrome/Edge&#10;3. **Permite el micrófono cuando lo pida**&#10;4. **Habla cerca del micrófono**&#10;5. ✅ Las burbujas de transcripción aparecerán en tiempo real&#10;&#10;---&#10;&#10;##  Verificar que Funciona&#10;&#10;Después de desplegar, abre DevTools (F12) y verifica:&#10;&#10;```javascript&#10;// En la consola, deberías ver:&#10;️ Web Speech API activado - ESPERA A QUE APAREZCA UNA BURBUJA GRIS MIENTRAS HABLAS&#10; Resultados recibidos: 1&#10;  ○ interim (85%): &quot;hol...&quot;&#10;  ✓ FINAL (92%): &quot;hola&quot;&#10;```&#10;&#10;---&#10;&#10;##  URLs Útiles&#10;&#10;- **Vercel Dashboard**: https://vercel.com/dashboard&#10;- **Docs Vercel**: https://vercel.com/docs&#10;- **Web Speech API**: https://developer.mozilla.org/es/docs/Web/API/Web_Speech_API&#10;&#10;---&#10;&#10;## ⚡ Ventajas de Vercel&#10;&#10;| Aspecto | Localhost | Vercel |&#10;|--------|-----------|--------|&#10;| Web Speech API | ❌ No funciona (sin internet) | ✅ Funciona (HTTPS + internet) |&#10;| Acceso público | ❌ Solo local | ✅ URL mundial |&#10;| SSL/HTTPS | ❌ No | ✅ Automático |&#10;| Costo | Gratis | Gratis (plan hobby) |&#10;| Deploy | Manual | Automático (git push) |&#10;&#10;---&#10;&#10;##  Después del Despliegue&#10;&#10;Comparte la URL de Vercel con cualquier persona y podrá usar EchoVis en cualquier navegador:&#10;```&#10;https://echovis.vercel.app/index.html&#10;```&#10;&#10;---&#10;&#10;**¿Necesitas ayuda con el despliegue? Abre GitHub y comparte el link cuando esté hecho.** &#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/vercel.json">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/vercel.json" />
+              <option name="updatedContent" value="{&#10;  &quot;buildCommand&quot;: &quot;&quot;,&#10;  &quot;devCommand&quot;: &quot;python -m http.server 3000&quot;,&#10;  &quot;installCommand&quot;: &quot;&quot;,&#10;  &quot;framework&quot;: &quot;static&quot;,&#10;  &quot;public&quot;: &quot;.&quot;&#10;}&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

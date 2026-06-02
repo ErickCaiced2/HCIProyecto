@@ -1,0 +1,1610 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>EchoVis - Visualizador de Entorno Acústico</title>
+    <style>
+        /* ========================================
+           BLOQUE 1: VARIABLES CSS - SISTEMA FIGMA
+           ======================================== */
+        :root {
+            --bg-app: #0a0a0f;
+            --bg-surface: #111118;
+            --bg-card: #1a1a24;
+            --bg-card-hover: #20202c;
+            --text-primary: #f0f0f0;
+            --text-secondary: #8888aa;
+            --text-muted: #555566;
+            --accent-green: #c8f135;
+            --accent-blue: #4da6ff;
+            --accent-yellow: #f5c842;
+            --accent-red: #e84040;
+            --accent-orange: #f58c00;
+            --border-subtle: rgba(255,255,255,0.07);
+            --border-card: rgba(255,255,255,0.10);
+        }
+
+        /* ========================================
+           RESET Y ESTILOS BASE
+           ======================================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            font-size: 16px;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background-color: var(--bg-app);
+        }
+
+        /* ========================================
+           ANIMACIONES GLOBALES
+           ======================================== */
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.6; }
+        }
+
+        @keyframes floatUp {
+            0% {
+                opacity: 1;
+                transform: translateY(0) translateX(0);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-120px) translateX(var(--offset-x, 0));
+            }
+        }
+
+        @keyframes flashYellow {
+            0%, 100% { background-color: var(--bg-app); }
+            50% { background-color: rgba(245, 200, 66, 0.22); }
+        }
+
+        @keyframes flashRed {
+            0%, 100% { background-color: var(--bg-app); }
+            50% { background-color: rgba(232, 64, 64, 0.22); }
+        }
+
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes dotsAnimation {
+            0%, 20% { opacity: 0.4; }
+            50% { opacity: 1; }
+            100% { opacity: 0.4; }
+        }
+
+        /* ========================================
+           CONTENEDOR PRINCIPAL Y VIEWPORT
+           ======================================== */
+        #app {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        #app-viewport {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-surface);
+        }
+
+        /* Desktop: viewport centrado y redondeado */
+        @media (min-width: 481px) {
+            #app-viewport {
+                max-width: 390px;
+                height: 844px;
+                margin: auto;
+                border-radius: 24px;
+                box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+                overflow: hidden;
+            }
+        }
+
+        /* ========================================
+           HEADER FIJO
+           ======================================== */
+        .header {
+            background-color: var(--bg-app);
+            border-bottom: 0.5px solid var(--border-subtle);
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+            flex-shrink: 0;
+        }
+
+        .header-left {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .header-badge {
+            background-color: var(--accent-green);
+            color: var(--bg-app);
+            font-size: 9px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+        }
+
+        .header-subtitle {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .header-icon {
+            font-size: 18px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: color 200ms;
+        }
+
+        .header-icon:hover {
+            color: var(--text-primary);
+        }
+
+        /* ========================================
+           MAIN CONTENT AREA
+           ======================================== */
+        #content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .screen {
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            overflow-y: auto;
+            animation: fadeIn 200ms ease;
+        }
+
+        .screen.active {
+            display: flex;
+            animation: none;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* ========================================
+           BOTTOM NAVIGATION
+           ======================================== */
+        .bottom-nav {
+            background-color: var(--bg-app);
+            border-top: 0.5px solid var(--border-subtle);
+            display: flex;
+            gap: 0;
+            padding: 0;
+            flex-shrink: 0;
+            z-index: 100;
+        }
+
+        .nav-tab {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 12px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            transition: color 200ms ease;
+        }
+
+        .nav-tab.active {
+            color: var(--accent-green);
+        }
+
+        .nav-tab.active.radar {
+            color: var(--accent-blue);
+        }
+
+        .nav-icon {
+            font-size: 20px;
+        }
+
+        /* ========================================
+           MODO SOCIAL SPACE
+           ======================================== */
+        #social-screen {
+            flex-direction: column;
+            padding-bottom: 0;
+        }
+
+        .mic-status-bar {
+            background-color: var(--bg-card);
+            border-radius: 12px;
+            padding: 10px 16px;
+            margin: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .mic-indicator {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+            transition: background-color 300ms ease, animation 300ms ease;
+        }
+
+        .mic-indicator.active {
+            background-color: var(--accent-green);
+            animation: pulse 1.5s infinite;
+        }
+
+        .mic-indicator.interim {
+            background-color: var(--accent-yellow);
+            animation: pulse 1.5s infinite;
+        }
+
+        .mic-indicator.paused {
+            background-color: var(--text-muted);
+            animation: none;
+        }
+
+        .mic-indicator.error {
+            background-color: var(--accent-red);
+            animation: none;
+        }
+
+        .mic-indicator.warning {
+            background-color: var(--accent-orange);
+            animation: pulse 1.5s infinite;
+        }
+
+        .mic-indicator.inactive {
+            background-color: var(--text-muted);
+            animation: none;
+        }
+
+        .mic-status-text {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .mic-status-main {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .mic-status-sub {
+            font-size: 12px;
+            color: var(--accent-green);
+        }
+
+        .mic-status-sub.inactive {
+            color: var(--text-muted);
+        }
+
+        .btn-mic-control {
+            background-color: transparent;
+            border: 1px solid var(--border-card);
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 200ms ease;
+            text-transform: uppercase;
+            min-height: 32px;
+        }
+
+        .btn-mic-control:hover {
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .chat-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb {
+            background: var(--border-card);
+            border-radius: 3px;
+        }
+
+        .speaker-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+
+        .message-bubble {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-width: 85%;
+            padding: 14px 18px;
+            border-radius: 16px;
+            background-color: var(--bg-card);
+            animation: slideInUp 180ms ease-out;
+        }
+
+        .message-bubble.first-person {
+            align-self: flex-end;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent-yellow);
+        }
+
+        .message-bubble.normal {
+            align-self: flex-start;
+            font-size: 16px;
+            color: var(--text-primary);
+        }
+
+        .message-bubble.laughter {
+            align-self: flex-start;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 16px;
+        }
+
+        .laughter-emoji {
+            font-size: 32px;
+            line-height: 1;
+        }
+
+        .laughter-text {
+            color: var(--accent-green);
+            font-weight: 600;
+        }
+
+        .processing-indicator {
+            align-self: flex-start;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            color: var(--text-secondary);
+            padding: 14px 18px;
+            background-color: var(--bg-card);
+            border-radius: 16px;
+            margin-bottom: 8px;
+        }
+
+        .processing-dot {
+            width: 4px;
+            height: 4px;
+            background-color: var(--text-secondary);
+            border-radius: 50%;
+            animation: dotsAnimation 1.2s infinite;
+        }
+
+        .processing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .processing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        .emoji-float {
+            position: fixed;
+            font-size: 2rem;
+            pointer-events: none;
+            z-index: 50;
+            animation: floatUp 1.2s ease-out forwards;
+        }
+
+        /* === INICIO CAMBIOS V3: Estilos Web Speech API === */
+
+        /* Burbuja interim (en vivo, mientras se habla) */
+        .message-bubble.interim {
+            color: var(--text-secondary);
+            font-style: italic;
+            border: 1px solid rgba(77, 166, 255, 0.3);
+        }
+
+        /* Cursor parpadeante */
+        .cursor-blink {
+            display: inline-block;
+            animation: blink 700ms step-end infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* Estilos para burbuja final con confirmación */
+        .message-bubble.final {
+            border: 1px solid transparent;
+            transition: border-color 300ms ease;
+        }
+
+        /* Timestamp en burbuja */
+        .bubble-timestamp {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Separador de tiempo */
+        .time-separator {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 11px;
+            margin: 12px 0;
+            position: relative;
+        }
+
+        .time-separator::before,
+        .time-separator::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 30%;
+            height: 1px;
+            background-color: var(--border-subtle);
+        }
+
+        .time-separator::before {
+            left: 0;
+        }
+
+        .time-separator::after {
+            right: 0;
+        }
+
+        /* Indicador de reconexión */
+        .reconnecting-indicator {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 13px;
+            padding: 8px;
+            animation: pulse 1.5s infinite;
+        }
+
+        /* Toast para notificaciones de palabras clave */
+        .keyword-toast {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(200, 241, 53, 0.15);
+            border: 1px solid var(--accent-green);
+            color: var(--accent-green);
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            z-index: 180;
+            animation: slideInUp 300ms ease-out, slideOutUp 300ms ease-out 2700ms forwards;
+            backdrop-filter: blur(4px);
+        }
+
+        .keyword-toast.danger {
+            border-color: var(--accent-red);
+            background-color: rgba(232, 64, 64, 0.15);
+            color: var(--accent-red);
+        }
+
+        .keyword-toast.info {
+            border-color: var(--accent-blue);
+            background-color: rgba(77, 166, 255, 0.15);
+            color: var(--accent-blue);
+        }
+
+        @keyframes slideOutUp {
+            to {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-20px);
+            }
+        }
+
+        /* === FIN CAMBIOS V3 === */
+
+        /* ========================================
+           MODO RADAR
+           ======================================== */
+        #radar-screen {
+            flex-direction: column;
+            justify-content: flex-start;
+            padding: 20px 16px 16px 16px;
+            overflow-y: auto;
+        }
+
+        .radar-title {
+            text-align: center;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+        }
+
+        .radar-badge {
+            text-align: center;
+            background-color: rgba(77, 166, 255, 0.12);
+            color: var(--accent-blue);
+            font-size: 13px;
+            font-weight: 600;
+            padding: 6px 16px;
+            border-radius: 20px;
+            margin: 0 auto 24px;
+            width: fit-content;
+        }
+
+        .radar-meter-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+
+        .radar-meter {
+            position: relative;
+            width: 180px;
+            height: 180px;
+        }
+
+        .radar-meter svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 0 20px rgba(77, 166, 255, 0.15));
+        }
+
+        .radar-meter-circle-bg {
+            fill: var(--bg-card);
+        }
+
+        .radar-meter-circle-border {
+            stroke: var(--border-card);
+            stroke-width: 8;
+            fill: none;
+        }
+
+        .radar-meter-circle-progress {
+            stroke: var(--accent-blue);
+            stroke-width: 8;
+            fill: none;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 200ms ease;
+        }
+
+        .radar-meter-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .radar-meter-db {
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1;
+        }
+
+        .radar-meter-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .radar-status-label {
+            text-align: center;
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 24px;
+            color: var(--accent-green);
+        }
+
+        .radar-status-label.high {
+            color: var(--accent-yellow);
+        }
+
+        .radar-status-label.danger {
+            color: var(--accent-red);
+        }
+
+        .simulate-header {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            margin-bottom: 12px;
+        }
+
+        .alert-card {
+            background-color: var(--bg-card);
+            border-radius: 12px;
+            padding: 14px 16px;
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            transition: all 200ms ease;
+            cursor: pointer;
+            border-left: 4px solid;
+        }
+
+        .alert-card:hover {
+            background-color: var(--bg-card-hover);
+        }
+
+        .alert-card.siren {
+            border-left-color: var(--accent-yellow);
+        }
+
+        .alert-card.horn {
+            border-left-color: var(--accent-red);
+        }
+
+        .alert-card-icon {
+            font-size: 28px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .alert-card-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .alert-card-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .alert-card-subtitle {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* ========================================
+           NOTIFICACIONES Y ALERTAS
+           ======================================== */
+        .notification-alert {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: var(--bg-card);
+            color: var(--text-primary);
+            padding: 14px 20px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 14px;
+            z-index: 200;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            display: none;
+            border-left: 4px solid var(--accent-yellow);
+            role: alert;
+        }
+
+        .notification-alert.show {
+            display: block;
+            animation: slideInUp 300ms ease-out;
+        }
+
+        .notification-alert.danger {
+            border-left-color: var(--accent-red);
+        }
+
+        /* ========================================
+           RESPONSIVO
+           ======================================== */
+        @media (max-width: 480px) {
+            #app-viewport {
+                max-width: 100%;
+                height: 100%;
+                border-radius: 0;
+                box-shadow: none;
+            }
+        }
+
+        /* ========================================
+           ACCESIBILIDAD
+           ======================================== */
+        button {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        button:focus-visible {
+            outline: 2px solid var(--accent-green);
+            outline-offset: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="app-viewport">
+            <!-- ========================================
+                 HEADER
+                 ======================================== -->
+            <header class="header">
+                 <div class="header-left">
+                     <div class="header-title">
+                         EchoVis
+                         <span class="header-badge">BETA</span>
+                     </div>
+                     <div class="header-subtitle" id="headerSubtitle">EPN · IHC · GR13W</div>
+                 </div>
+                 <div style="display: flex; gap: 8px; align-items: center;">
+                     <button class="header-icon" id="btnCopyTranscript" aria-label="Copiar transcripción" title="Copiar transcripción">
+                         📋
+                     </button>
+                     <button class="header-icon" id="btnSettings" aria-label="Configuración">
+                         ⚙️
+                     </button>
+                 </div>
+            </header>
+
+            <!-- ========================================
+                 CONTENT AREA
+                 ======================================== -->
+            <div id="content">
+                <!-- Modo Social Space -->
+                <section id="social-screen" class="screen active">
+                    <!-- Barra de estado del micrófono -->
+                    <div class="mic-status-bar">
+                        <div class="mic-indicator" id="micIndicator"></div>
+                        <div class="mic-status-text">
+                            <div class="mic-status-main">Transcripción Continua</div>
+                            <div class="mic-status-sub" id="micStatusSub">Inactiva</div>
+                        </div>
+                        <button class="btn-mic-control" id="btnMicToggle" aria-label="Pausar micrófono">
+                            Pausar
+                        </button>
+                    </div>
+
+                    <!-- Chat Container -->
+                    <div class="chat-container" id="chatContainer"></div>
+                </section>
+
+                <!-- Modo Radar -->
+                <section id="radar-screen" class="screen">
+                    <div class="radar-title">Monitoreo Acústico</div>
+                    <div class="radar-badge">✓ Modo Radar Activo (2° plano)</div>
+
+                    <!-- Medidor circular de dB -->
+                    <div class="radar-meter-container">
+                        <div class="radar-meter">
+                            <svg viewBox="0 0 180 180" style="width: 100%; height: 100%;">
+                                <!-- Círculo de fondo -->
+                                <circle class="radar-meter-circle-bg" cx="90" cy="90" r="80"/>
+                                <!-- Círculo de borde -->
+                                <circle class="radar-meter-circle-border" cx="90" cy="90" r="80"/>
+                                <!-- Círculo de progreso -->
+                                <circle id="radarProgress" class="radar-meter-circle-progress" cx="90" cy="90" r="80"
+                                    stroke-dasharray="502.65" stroke-dashoffset="502.65"
+                                    style="transform: rotate(-90deg); transform-origin: 90px 90px;"/>
+                            </svg>
+                            <div class="radar-meter-text">
+                                <div class="radar-meter-db" id="dbValue">0</div>
+                                <div class="radar-meter-label">DB</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Estado del radar -->
+                    <div class="radar-status-label" id="radarStatus">
+                        ENTORNO SEGURO
+                    </div>
+
+                    <!-- Simulador de alertas -->
+                    <div class="simulate-header">Simular Alertas (+20db)</div>
+
+                    <div class="alert-card siren" id="cardSiren">
+                        <div class="alert-card-icon">🔔</div>
+                        <div class="alert-card-text">
+                            <div class="alert-card-title">Sirena de Emergencia</div>
+                            <div class="alert-card-subtitle">Destello amarillo y vibración SOS</div>
+                        </div>
+                    </div>
+
+                    <div class="alert-card horn" id="cardHorn">
+                        <div class="alert-card-icon">⚠️</div>
+                        <div class="alert-card-text">
+                            <div class="alert-card-title">Claxon de Auto</div>
+                            <div class="alert-card-subtitle">Destello rojo y vibración intensa</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ========================================
+                 BOTTOM NAVIGATION
+                 ======================================== -->
+            <nav class="bottom-nav">
+                <button class="nav-tab active" id="tabSocial" data-screen="social">
+                    <span class="nav-icon">💬</span>
+                    <span>Social Space</span>
+                </button>
+                <button class="nav-tab radar" id="tabRadar" data-screen="radar">
+                    <span class="nav-icon">〰️</span>
+                    <span>Modo Radar</span>
+                </button>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Notificación de alerta flotante -->
+    <div class="notification-alert" id="alertNotification" role="alert"></div>
+
+    <script>
+        // === INICIO CAMBIOS V3: Web Speech API ===
+
+        // NOTA DE PRIVACIDAD: Web Speech API (webkitSpeechRecognition) envía el audio
+        // a los servidores de Google para procesamiento. Para producción con datos sensibles,
+        // considerar Whisper API con procesamiento local o self-hosted.
+
+        // ========================================
+        // BLOQUE 1: VARIABLES GLOBALES Y ESTADO
+        // ========================================
+        const state = {
+            currentScreen: 'social',
+            micActive: false,
+            micAvailable: false,
+            audioContext: null,
+            mediaStream: null,
+            analyser: null,
+            currentDB: 0,
+            lastHighAlertTime: 0,
+            paused: false,
+
+            // Web Speech API
+            recognition: null,
+            isListening: false,
+            totalWords: 0,
+            lastTimeSeparatorTime: 0,
+            usingSpeechAPI: true,
+            useSimulatedMode: false
+        };
+
+        // Palabras clave para detección contextual
+        const KEYWORDS = {
+            laugh: ['jaja', 'jeje', 'jiji', 'lol', 'haha', 'risas', 'se rieron', 'carcajada', 'me reí'],
+            danger: ['cuidado', 'peligro', 'auxilio', 'ayuda', 'socorro', 'fuego', 'emergencia'],
+            name: ['erick', 'jhonny']
+        };
+
+        // Elementos del DOM
+        const DOM = {
+            // Navegación
+            tabSocial: document.getElementById('tabSocial'),
+            tabRadar: document.getElementById('tabRadar'),
+            socialScreen: document.getElementById('social-screen'),
+            radarScreen: document.getElementById('radar-screen'),
+
+            // Micrófono
+            micIndicator: document.getElementById('micIndicator'),
+            micStatusSub: document.getElementById('micStatusSub'),
+            btnMicToggle: document.getElementById('btnMicToggle'),
+
+            // Chat
+            chatContainer: document.getElementById('chatContainer'),
+
+            // Radar
+            dbValue: document.getElementById('dbValue'),
+            radarStatus: document.getElementById('radarStatus'),
+            radarProgress: document.getElementById('radarProgress'),
+            cardSiren: document.getElementById('cardSiren'),
+            cardHorn: document.getElementById('cardHorn'),
+
+            // Alertas
+            alertNotification: document.getElementById('alertNotification'),
+
+            // Header
+            headerSubtitle: document.getElementById('headerSubtitle'),
+            btnCopyTranscript: document.getElementById('btnCopyTranscript')
+        };
+
+        // ========================================
+        // BLOQUE 2: HELPER — OBTENER HORA ACTUAL
+        // ========================================
+        function getCurrentTime() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            return `${hours}:${minutes}`;
+        }
+
+        // ========================================
+        // BLOQUE 3: BARRA DE ESTADO DEL MICRÓFONO
+        // ========================================
+        function updateStatusBar(message, state_type = 'listening') {
+            const indicator = DOM.micIndicator;
+            const statusSub = DOM.micStatusSub;
+
+            // Determinar clase y texto según el estado
+            let indicatorClass = 'active';
+            let statusText = message;
+            let animateIndicator = true;
+
+            switch(state_type) {
+                case 'listening':
+                    indicatorClass = 'active';
+                    statusText = 'Activa';
+                    break;
+                case 'interim':
+                    indicatorClass = 'interim';
+                    statusText = 'Escuchando...';
+                    break;
+                case 'paused':
+                    indicatorClass = 'paused';
+                    statusText = 'En pausa · Micrófono detenido';
+                    animateIndicator = false;
+                    break;
+                case 'error':
+                    indicatorClass = 'error';
+                    statusText = message;
+                    animateIndicator = false;
+                    break;
+                case 'warning':
+                    indicatorClass = 'warning';
+                    statusText = message;
+                    break;
+            }
+
+            // Actualizar indicador visual
+            indicator.className = 'mic-indicator ' + indicatorClass;
+            statusSub.textContent = statusText;
+            statusSub.className = 'mic-status-sub ' + (indicatorClass === 'active' ? '' : 'inactive');
+        }
+
+        // ========================================
+        // BLOQUE 4: INICIALIZACIÓN DE AUDIO Y WEB SPEECH API
+        // ========================================
+        async function initializeAudio() {
+            try {
+                // Solicitar acceso al micrófono (para AudioContext del Radar)
+                state.mediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: false
+                });
+
+                state.micAvailable = true;
+                state.micActive = true;
+
+                // Crear AudioContext para análisis de frecuencia del Radar
+                state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const source = state.audioContext.createMediaStreamSource(state.mediaStream);
+
+                // Crear analizador
+                state.analyser = state.audioContext.createAnalyser();
+                state.analyser.fftSize = 256;
+                source.connect(state.analyser);
+
+                // Inicia monitoreo de dB en tiempo real
+                monitorNoiseLevel();
+
+            } catch (error) {
+                console.error('Error al acceder al micrófono:', error);
+                state.micAvailable = false;
+                updateStatusBar('Micrófono bloqueado — revisa permisos del navegador', 'error');
+            }
+
+            // Inicializar Web Speech API (independiente del permiso del micrófono)
+            initSpeechRecognition();
+        }
+
+        // ========================================
+        // BLOQUE 5: INICIALIZACIÓN WEB SPEECH API (VERSIÓN MEJORADA)
+        // ========================================
+        function initSpeechRecognition() {
+            // Verificar soporte
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            if (!SpeechRecognition) {
+                console.warn('❌ Web Speech API no soportada en este navegador');
+                updateStatusBar('Tu navegador no soporta reconocimiento de voz', 'warning');
+                state.usingSpeechAPI = false;
+                return;
+            }
+
+            console.log('🎤 Inicializando Web Speech Recognition...');
+            state.recognition = new SpeechRecognition();
+
+            // Configuración para máxima compatibilidad
+            state.recognition.language = 'es';  // Español genérico (más compatible)
+            state.recognition.continuous = true;
+            state.recognition.interimResults = true;
+            state.recognition.maxAlternatives = 1;
+
+            // === RESULTADO DE TRANSCRIPCIÓN ===
+            state.recognition.onstart = () => {
+                console.log('✅ Reconocimiento iniciado, escuchando...');
+                updateStatusBar('Activa', 'listening');
+            };
+
+            state.recognition.onresult = (event) => {
+                console.log(`📊 Resultados recibidos: ${event.results.length}`);
+
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript.trim();
+                    const isFinal = event.results[i].isFinal;
+                    const confidence = event.results[i][0].confidence;
+
+                    console.log(`  ${isFinal ? '✓ FINAL' : '○ interim'} (${Math.round(confidence*100)}%): "${transcript}"`);
+
+                    if (!isFinal) {
+                        // Interim: mostrar en vivo
+                        updateLiveBubble(transcript);
+                    } else {
+                        // Final: guardar permanente
+                        commitBubble(transcript);
+                    }
+                }
+            };
+
+            state.recognition.onerror = (event) => {
+                console.error(`❌ Error: ${event.error}`);
+
+                switch(event.error) {
+                    case 'network':
+                        console.error('⚠️  PROBLEMA DE RED: Verifica tu conexión a Internet');
+                        console.error('   Web Speech API requiere contacto con servidores de Google');
+                        updateStatusBar('Error de red - Verifica conexión a Internet', 'error');
+                        break;
+                    case 'not-allowed':
+                        console.error('🚫 Micrófono bloqueado - Permite acceso al micrófono');
+                        updateStatusBar('Micrófono bloqueado o denegado', 'error');
+                        break;
+                    case 'no-speech':
+                        console.log('🔇 No hay sonido detectado (silencio)');
+                        updateStatusBar('En espera de sonido...', 'listening');
+                        break;
+                    case 'audio-capture':
+                        console.error('🎤 No hay dispositivo de micrófono disponible');
+                        updateStatusBar('Sin micrófono disponible', 'error');
+                        break;
+                    default:
+                        console.error(`Error desconocido: ${event.error}`);
+                }
+            };
+
+            state.recognition.onend = () => {
+                console.log('🛑 Reconocimiento detenido');
+                if (state.isListening && !state.paused) {
+                    console.log('🔄 Reiniciando automáticamente...');
+                    setTimeout(() => {
+                        try {
+                            state.recognition.start();
+                        } catch(e) {
+                            console.log('(Ya está en progreso)');
+                        }
+                    }, 100);
+                }
+            };
+
+            // Iniciar escucha
+            state.isListening = true;
+            try {
+                state.recognition.start();
+                console.log('🎙️ Web Speech API activado - ESPERA A QUE APAREZCA UNA BURBUJA GRIS MIENTRAS HABLAS');
+            } catch (e) {
+                console.log('📌 Recognition ya estaba activo:', e.message);
+            }
+        }
+
+        // ========================================
+        // BLOQUE 4: EFECTO KARAOKE (INTERIM RESULTS)
+        // ========================================
+        function updateLiveBubble(partialText) {
+            let bubble = document.getElementById('bubble-live');
+
+            if (!bubble) {
+                // Crear nueva burbuja provisional
+                bubble = document.createElement('div');
+                bubble.id = 'bubble-live';
+                bubble.className = 'message-bubble normal interim';
+                DOM.chatContainer.appendChild(bubble);
+            }
+
+            // Actualizar texto con cursor parpadeante
+            bubble.textContent = partialText + '▋';
+
+            // Auto-scroll si estaba en el fondo
+            scrollToBottomIfAtBottom();
+        }
+
+        function commitBubble(finalText) {
+            const bubble = document.getElementById('bubble-live');
+
+            if (bubble) {
+                bubble.removeAttribute('id');
+                bubble.classList.remove('interim');
+                bubble.classList.add('final');
+
+                // Mostrar solo el texto sin cursor
+                bubble.textContent = finalText;
+
+                // Añadir timestamp
+                const timestamp = document.createElement('div');
+                timestamp.className = 'bubble-timestamp';
+                timestamp.textContent = getCurrentTime();
+                bubble.appendChild(timestamp);
+
+                // Micro-flash de confirmación
+                bubble.style.borderColor = 'var(--accent-green)';
+                setTimeout(() => bubble.style.borderColor = '', 300);
+            } else {
+                // Si por algún motivo no existe, crear directamente
+                addFinalBubble(finalText);
+            }
+
+            // Detectar palabras clave ANTES de marcar como final
+            detectKeywords(finalText);
+
+            // Actualizar contador de palabras
+            const wordCount = finalText.trim().split(/\s+/).length;
+            state.totalWords += wordCount;
+            updateWordCount();
+
+            // Insertar separador de tiempo si ha pasado más de 60s desde el último
+            checkTimeSeparator();
+
+            // Auto-scroll
+            scrollToBottomIfAtBottom();
+        }
+
+        function addFinalBubble(text) {
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble normal final';
+            bubble.textContent = text;
+
+            const timestamp = document.createElement('div');
+            timestamp.className = 'bubble-timestamp';
+            timestamp.textContent = getCurrentTime();
+            bubble.appendChild(timestamp);
+
+            DOM.chatContainer.appendChild(bubble);
+        }
+
+        // ========================================
+        // BLOQUE 5: DETECCIÓN DE PALABRAS CLAVE
+        // ========================================
+        function detectKeywords(text) {
+            const lower = text.toLowerCase();
+
+            // Detección de risas
+            if (KEYWORDS.laugh.some(w => lower.includes(w))) {
+                insertLaughBubble();
+                triggerFloatingEmojis();
+                return; // No procesar más keywords
+            }
+
+            // Detección de peligro
+            if (KEYWORDS.danger.some(w => lower.includes(w))) {
+                showToast('⚠ Palabra de alerta detectada: "' + text + '"', 'danger');
+                return;
+            }
+
+            // Detección de nombre del usuario
+            if (KEYWORDS.name.some(w => lower.includes(w))) {
+                showToast('👤 ¿Te llamaron? Se mencionó tu nombre', 'info');
+                navigator.vibrate && navigator.vibrate([100, 50, 100]);
+            }
+        }
+
+        function insertLaughBubble() {
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble laughter';
+            bubble.innerHTML = `
+                <span class="laughter-emoji">😄</span>
+                <span class="laughter-text">[Risas]</span>
+            `;
+            DOM.chatContainer.appendChild(bubble);
+            triggerFloatingEmojis();
+        }
+
+        // ========================================
+        // BLOQUE 6: TOAST DE PALABRAS CLAVE
+        // ========================================
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `keyword-toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // ... funciones updateStatusBar y getCurrentTime ya definidas en BLOQUE 2 y 3
+
+        // ========================================
+        // BLOQUE 9: ACTUALIZAR CONTADOR DE PALABRAS
+        // ========================================
+        function updateWordCount() {
+            const subtitle = DOM.headerSubtitle;
+            if (state.totalWords > 0) {
+                subtitle.textContent = `${state.totalWords} palabras · EPN · IHC · GR13W`;
+            }
+        }
+
+        // ========================================
+        // BLOQUE 10: SEPARADOR DE TIEMPO
+        // ========================================
+        function checkTimeSeparator() {
+            const now = Date.now();
+            if (now - state.lastTimeSeparatorTime > 60000) {  // 60 segundos
+                state.lastTimeSeparatorTime = now;
+
+                const separator = document.createElement('div');
+                separator.className = 'time-separator';
+                separator.textContent = getCurrentTime();
+                DOM.chatContainer.appendChild(separator);
+
+                scrollToBottomIfAtBottom();
+            }
+        }
+
+        // ========================================
+        // BLOQUE 11: AUTO-SCROLL INTELIGENTE
+        // ========================================
+        function scrollToBottomIfAtBottom() {
+            const threshold = 60;  // píxeles desde el fondo
+            const isAtBottom =
+                DOM.chatContainer.scrollHeight - DOM.chatContainer.scrollTop - DOM.chatContainer.clientHeight < threshold;
+
+            if (isAtBottom) {
+                setTimeout(() => {
+                    DOM.chatContainer.scrollTop = DOM.chatContainer.scrollHeight;
+                }, 0);
+            }
+        }
+
+        // ========================================
+        // BLOQUE 12: COPIAR TRANSCRIPCIÓN
+        // ========================================
+        function copyTranscriptToClipboard() {
+            const bubbles = DOM.chatContainer.querySelectorAll('.message-bubble.final, .message-bubble.laughter');
+            let fullText = '';
+
+            bubbles.forEach(bubble => {
+                if (bubble.classList.contains('laughter')) {
+                    fullText += '[Risas]\n';
+                } else {
+                    fullText += bubble.textContent.replace(/\d{2}:\d{2}/, '').trim() + '\n';
+                }
+            });
+
+            if (!fullText.trim()) {
+                showAlert('No hay transcripción para copiar', false);
+                return;
+            }
+
+            navigator.clipboard.writeText(fullText).then(() => {
+                showAlert('✓ Transcripción copiada al portapapeles', false);
+            }).catch(err => {
+                console.error('Error al copiar:', err);
+                showAlert('Error al copiar transcripción', true);
+            });
+        }
+
+        // ========================================
+        // BLOQUE 13: MONITOREO DE NIVEL DE RUIDO
+        // ========================================
+        function monitorNoiseLevel() {
+            const updateDB = () => {
+                if (!state.analyser || state.paused) {
+                    requestAnimationFrame(updateDB);
+                    return;
+                }
+
+                const dataArray = new Uint8Array(state.analyser.frequencyBinCount);
+                state.analyser.getByteFrequencyData(dataArray);
+
+                // Calcular promedio
+                const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+                // Convertir a dB (escala aproximada 0-90)
+                const dB = Math.round(20 * Math.log10(average / 255) + 90);
+                state.currentDB = Math.max(0, Math.min(90, dB));
+
+                // Actualizar UI en Radar
+                updateRadarMeter(state.currentDB);
+
+                // Detectar alerta de nivel elevado (>75 dB)
+                if (state.currentDB > 75) {
+                    const now = Date.now();
+                    if (now - state.lastHighAlertTime > 1000) {
+                        showAlert('⚠️ Nivel elevado detectado', false);
+                        state.lastHighAlertTime = now;
+                    }
+                }
+
+                requestAnimationFrame(updateDB);
+            };
+
+            updateDB();
+        }
+
+        // ========================================
+        // BLOQUE 14: ACTUALIZAR MEDIDOR RADAR
+        // ========================================
+        function updateRadarMeter(dB) {
+            // Actualizar valor numérico
+            DOM.dbValue.textContent = dB;
+
+            // Actualizar circle progress (0-90 dB = 0-502.65 perímetro)
+            const circumference = 502.65;
+            const offset = circumference - (dB / 90) * circumference;
+            DOM.radarProgress.style.strokeDashoffset = offset;
+
+            // Actualizar estado
+            let statusText = '✓ ENTORNO SEGURO';
+            let statusClass = '';
+
+            if (dB >= 95) {
+                statusText = '🔴 PELIGRO';
+                statusClass = 'danger';
+            } else if (dB >= 80) {
+                statusText = '🟡 NIVEL ALTO';
+                statusClass = 'high';
+            }
+
+            DOM.radarStatus.textContent = statusText;
+            DOM.radarStatus.className = `radar-status-label ${statusClass}`;
+        }
+
+        // ========================================
+        // BLOQUE 15: ALERTAS SIMULADAS (RADAR)
+        // ========================================
+        function triggerSirenAlert() {
+            // Animar fondo amarillo
+            document.body.style.animation = 'flashYellow 300ms ease-in-out 6';
+
+            // Vibración SOS
+            if (navigator.vibrate) {
+                navigator.vibrate([200, 100, 200, 100, 200]);
+            }
+
+            showAlert('⚠️ SIRENA DE EMERGENCIA DETECTADA', false);
+        }
+
+        function triggerHornAlert() {
+            // Animar fondo rojo
+            document.body.style.animation = 'flashRed 400ms ease-in-out 6';
+
+            // Vibración intensa
+            if (navigator.vibrate) {
+                navigator.vibrate([800]);
+            }
+
+            showAlert('🚗 CLAXON DE AUTO — VEHÍCULO CERCA', true);
+        }
+
+        // ========================================
+        // BLOQUE 16: EMOJIS FLOTANTES
+        // ========================================
+        function triggerFloatingEmojis() {
+            for (let i = 0; i < 5; i++) {
+                setTimeout(() => {
+                    const floatingEl = document.createElement('div');
+                    floatingEl.className = 'emoji-float';
+                    floatingEl.textContent = '😄';
+                    floatingEl.style.left = (Math.random() * 80 + 10) + '%';
+                    floatingEl.style.bottom = '0';
+                    floatingEl.style.setProperty('--offset-x', (Math.random() * 100 - 50) + 'px');
+
+                    document.body.appendChild(floatingEl);
+
+                    setTimeout(() => floatingEl.remove(), 1200);
+                }, i * 100);
+            }
+        }
+
+        // ========================================
+        // BLOQUE 17: CONTROL DEL MICRÓFONO
+        // ========================================
+        function toggleMic() {
+            if (!state.usingSpeechAPI) return;
+
+            state.paused = !state.paused;
+
+            if (state.paused) {
+                // Pausar
+                state.audioContext?.suspend();
+                if (state.recognition) {
+                    state.recognition.stop();
+                    state.isListening = false;
+                }
+                DOM.btnMicToggle.textContent = 'Reanudar';
+                updateStatusBar('En pausa · Micrófono detenido', 'paused');
+            } else {
+                // Reanudar
+                state.audioContext?.resume();
+                if (state.recognition) {
+                    state.isListening = true;
+                    try {
+                        state.recognition.start();
+                    } catch (e) {
+                        console.log('Recognition ya está activa');
+                    }
+                }
+                DOM.btnMicToggle.textContent = 'Pausar';
+                updateStatusBar('Escuchando...', 'listening');
+            }
+        }
+
+        // ========================================
+        // BLOQUE 18: MODO SIMULADO (FALLBACK)
+        // ========================================
+        const simulatedPhrases = [
+            "Hola, ¿cómo estás hoy?",
+            "Ese fue un sonido muy interesante",
+            "Puedo escuchar las aves afuera",
+            "¿Oíste ese ruido en la calle?",
+            "La música está sonando bastante fuerte",
+            "Qué día más tranquilo"
+        ];
+        let simulatedIndex = 0;
+
+        function startSimulatedMode() {
+            console.log('✅ MODO SIMULACIÓN ACTIVADO');
+            state.useSimulatedMode = true;
+            state.isListening = true;
+            updateStatusBar('Modo simulación activo', 'warning');
+
+            const interval = setInterval(() => {
+                if (!state.isListening || state.paused || !state.useSimulatedMode) return;
+
+                const phrase = simulatedPhrases[simulatedIndex % simulatedPhrases.length];
+                simulatedIndex++;
+
+                const isLaughter = Math.random() < 0.2;
+
+                if (isLaughter) {
+                    console.log('😄 Insertando burbuja de risas');
+                    insertLaughBubble();
+                    updateStatusBar('Escuchando...', 'listening');
+                } else {
+                    console.log(`📝 Insertando frase: "${phrase}"`);
+                    const bubble = document.createElement('div');
+                    bubble.className = 'message-bubble normal final';
+                    bubble.textContent = phrase;
+
+                    const timestamp = document.createElement('div');
+                    timestamp.className = 'bubble-timestamp';
+                    timestamp.textContent = getCurrentTime();
+                    bubble.appendChild(timestamp);
+
+                    DOM.chatContainer.appendChild(bubble);
+
+                    const wordCount = phrase.trim().split(/\s+/).length;
+                    state.totalWords += wordCount;
+                    updateWordCount();
+                }
+
+                scrollToBottomIfAtBottom();
+            }, 3500);
+        }
+
+        // ========================================
+        // BLOQUE 19: NOTIFICACIONES
+        // ========================================
+        function showAlert(message, isDanger = false) {
+            const notification = DOM.alertNotification;
+            notification.textContent = message;
+            notification.classList.add('show');
+
+            if (isDanger) {
+                notification.classList.add('danger');
+            } else {
+                notification.classList.remove('danger');
+            }
+
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // ========================================
+        // BLOQUE 20: NAVEGACIÓN ENTRE PANTALLAS
+        // ========================================
+        function switchScreen(screenId) {
+            state.currentScreen = screenId;
+
+            // Actualizar tabs
+            DOM.tabSocial.classList.toggle('active', screenId === 'social');
+            DOM.tabRadar.classList.toggle('active', screenId === 'radar');
+
+            // Actualizar clases radar
+            DOM.tabRadar.classList.toggle('radar', screenId === 'radar');
+
+            // Actualizar visibilidad de pantallas
+            DOM.socialScreen.classList.toggle('active', screenId === 'social');
+            DOM.radarScreen.classList.toggle('active', screenId === 'radar');
+        }
+
+        // ========================================
+        // BLOQUE 21: EVENT LISTENERS
+        // ========================================
+        DOM.tabSocial.addEventListener('click', () => switchScreen('social'));
+        DOM.tabRadar.addEventListener('click', () => switchScreen('radar'));
+        DOM.btnMicToggle.addEventListener('click', toggleMic);
+
+        DOM.cardSiren.addEventListener('click', triggerSirenAlert);
+        DOM.cardHorn.addEventListener('click', triggerHornAlert);
+
+        DOM.btnCopyTranscript.addEventListener('click', copyTranscriptToClipboard);
+
+        // ========================================
+        // BLOQUE 22: INICIALIZACIÓN
+        // ========================================
+        document.addEventListener('DOMContentLoaded', () => {
+            // Inicializar audio al cargar
+            initializeAudio();
+            switchScreen('social');
+        });
+
+        // === FIN CAMBIOS V3: Web Speech API ===
+    </script>
+</body>
+</html>
+
